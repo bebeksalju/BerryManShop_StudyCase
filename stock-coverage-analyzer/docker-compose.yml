@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    container_name: stock-coverage-analyzer
+    ports:
+      - "${PORT:-5000}:5000"
+    volumes:
+      # Mount instance folder agar SQLite persisten saat restart
+      - ./instance:/app/instance
+    environment:
+      - PORT=5000
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    restart: unless-stopped

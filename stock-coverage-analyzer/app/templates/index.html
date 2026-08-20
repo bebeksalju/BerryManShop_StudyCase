@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Stock Coverage Analyzer{% endblock %}
+
+{% block content %}
+
+<!-- CRITICAL ALERT -->
+{% if summary.critical > 0 %}
+<div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+  <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+  <div>
+    <strong>Peringatan Reorder!</strong>
+    Terdapat <strong>{{ summary.critical }} SKU</strong> dengan status
+    <span class="badge bg-danger">Critical</span>.
+    Segera lakukan reorder untuk menghindari kehabisan stok.
+  </div>
+</div>
+{% endif %}
+
+<!-- SUMMARY CARDS -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Total SKU</div>
+        <div class="fs-3 fw-bold">{{ summary.total }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card h-100 {% if summary.critical > 0 %}border-danger{% endif %}">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Critical</div>
+        <div class="fs-3 fw-bold text-danger">{{ summary.critical }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Need Order</div>
+        <div class="fs-3 fw-bold text-warning">{{ summary.need_order }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">Sufficient</div>
+        <div class="fs-3 fw-bold text-success">{{ summary.sufficient }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="text-muted small mb-1">No Sales Data</div>
+        <div class="fs-3 fw-bold text-secondary">{{ summary.no_sales }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" action="{{ url_for('main.index') }}" id="filter-form">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label for="search" class="form-label small text-muted mb-1">Cari Barang</label>
+          <input id="search" type="text" name="search" value="{{ search }}"
+                 class="form-control form-control-sm" placeholder="Kode atau nama barang…" autocomplete="off" />
+        </div>
+        <div class="col-md-3">
+          <label for="supplier" class="form-label small text-muted mb-1">Supplier</label>
+          <select id="supplier" name="supplier" class="form-select form-select-sm">
+            <option value="">Semua Supplier</option>
+            <option value="IMPOR" {% if filter_supplier == 'IMPOR' %}selected{% endif %}>IMPOR</option>
+            <option value="LOKAL" {% if filter_supplier == 'LOKAL' %}selected{% endif %}>LOKAL</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="status" class="form-label small text-muted mb-1">Status</label>
+          <select id="status" name="status" class="form-select form-select-sm">
+            <option value="">Semua Status</option>
+            <option value="Critical"      {% if filter_status == 'Critical'      %}selected{% endif %}>Critical</option>
+            <option value="Need Order"    {% if filter_status == 'Need Order'    %}selected{% endif %}>Need Order</option>
+            <option value="Sufficient"    {% if filter_status == 'Sufficient'    %}selected{% endif %}>Sufficient</option>
+            <option value="No Sales Data" {% if filter_status == 'No Sales Data' %}selected{% endif %}>No Sales Data</option>
+          </select>
+        </div>
+        <div class="col-md-1 d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm w-100" id="btn-filter">
+            <i class="bi bi-funnel"></i> Filter
+          </button>
+        </div>
+      </div>
+      {% if search or filter_supplier or filter_status %}
+      <div class="mt-2 d-flex align-items-center gap-2">
+        <small class="text-muted">Menampilkan <strong>{{ rows|length }}</strong> hasil</small>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary btn-sm py-0 px-2" id="btn-reset">
+          <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </a>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- DATA TABLE -->
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
+    <h6 class="mb-0">
+      <i class="bi bi-table me-1"></i>
+      Analisis Coverage Stok
+      <span class="text-muted fw-normal">({{ rows|length }} SKU)</span>
+    </h6>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.import_accurate') }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-upload me-1"></i>Impor Accurate
+      </a>
+      <a href="{{ url_for('main.export_excel') }}" class="btn btn-outline-success btn-sm">
+        <i class="bi bi-file-earmark-excel me-1"></i>Ekspor Excel
+      </a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0" id="coverage-table">
+      <thead>
+        <tr>
+          <th>Kode</th>
+          <th>Nama Barang</th>
+          <th class="text-center">Supplier</th>
+          <th class="text-end">Stok Gudang</th>
+          <th class="text-end">Dipesan</th>
+          <th class="text-end">Dijual</th>
+          <th class="text-end">Stok Dijual</th>
+          <th class="text-end">ADS</th>
+          <th class="text-end">Coverage (Hr)</th>
+          <th class="text-center">Status</th>
+          <th>Rekomendasi</th>
+          <th class="text-center">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rows %}
+          {% for r in rows %}
+          <tr>
+            <td class="text-nowrap"><code>{{ r.kode_barang }}</code></td>
+            <td>{{ r.nama_barang }}</td>
+            <td class="text-center text-nowrap">
+              {% if r.supplier == 'IMPOR' %}
+              <span class="badge bg-primary bg-opacity-10 text-primary border">IMPOR</span>
+              {% else %}
+              <span class="badge bg-success bg-opacity-10 text-success border">LOKAL</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-nowrap">{{ "{:,}".format(r.stok_gudang) }}</td>
+            <td class="text-end text-nowrap text-muted">{{ "{:,}".format(r.dipesan) }}</td>
+            <td class="text-end text-nowrap text-muted">{{ "{:,}".format(r.dijual) }}</td>
+            <td class="text-end text-nowrap fw-semibold">{{ "{:,}".format(r.stok_dapat_dijual) }}</td>
+            <td class="text-end text-nowrap text-muted">
+              {% if r.ads == 0 %}—{% else %}{{ "%.2f"|format(r.ads) }}{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              {% if r.coverage_days is none %}
+                <span class="text-muted">N/A</span>
+              {% else %}
+                <strong class="{% if r.badge == 'danger' %}text-danger{% elif r.badge == 'warning' %}text-warning{% elif r.badge == 'success' %}text-success{% else %}text-secondary{% endif %}">
+                  {{ "%.2f"|format(r.coverage_days) }}
+                </strong>
+              {% endif %}
+            </td>
+            <td class="text-center text-nowrap">
+              {% if r.badge == 'danger' %}
+                <span class="badge bg-danger">Critical</span>
+              {% elif r.badge == 'warning' %}
+                <span class="badge bg-warning text-dark">Need Order</span>
+              {% elif r.badge == 'success' %}
+                <span class="badge bg-success">Sufficient</span>
+              {% else %}
+                <span class="badge bg-secondary">No Data</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted" style="max-width:200px">{{ r.rekomendasi }}</td>
+            <td class="text-center text-nowrap">
+              <a href="{{ url_for('main.edit_sku', kode=r.kode_barang) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 btn-hapus"
+                      data-kode="{{ r.kode_barang }}" data-nama="{{ r.nama_barang }}" title="Hapus">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="12" class="text-center py-5 text-muted">
+              <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+              Tidak ada data yang ditemukan.
+              <a href="{{ url_for('main.index') }}" class="d-block mt-1">Reset filter</a>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="d-flex flex-wrap gap-3 mb-3 small text-muted">
+  <span><span class="badge bg-danger me-1">&nbsp;</span>Critical (&lt; Lead Time)</span>
+  <span><span class="badge bg-warning me-1">&nbsp;</span>Need Order (&lt; Lead Time + Safety)</span>
+  <span><span class="badge bg-success me-1">&nbsp;</span>Sufficient</span>
+  <span><span class="badge bg-secondary me-1">&nbsp;</span>No Sales Data</span>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal fade" id="modalHapus" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-trash text-danger me-1"></i>Konfirmasi Hapus</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Yakin ingin menghapus SKU <strong id="modal-nama-sku"></strong>?</p>
+        <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Tindakan ini tidak dapat dibatalkan.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" id="modal-cancel">Batal</button>
+        <form id="form-hapus" method="post" class="d-inline">
+          <button type="submit" class="btn btn-sm btn-danger" id="btn-confirm-delete">
+            <i class="bi bi-trash me-1"></i>Hapus
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

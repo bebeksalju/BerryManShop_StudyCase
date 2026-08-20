@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Pengaturan Pemetaan Kolom – Stock Coverage Analyzer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+
+    <!-- BREADCRUMB -->
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Pengaturan Pemetaan Kolom</li>
+      </ol>
+    </nav>
+
+    <div class="card">
+      <!-- Header -->
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
+        <div>
+          <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Pengaturan Pemetaan Kolom Accurate</h5>
+          <small class="text-muted">Tentukan kata kunci nama kolom dari file Accurate. Pisahkan dengan koma ( , ).</small>
+        </div>
+        <form method="post" action="{{ url_for('main.reset_settings') }}" onsubmit="return confirm('Yakin ingin mengembalikan seluruh pemetaan kolom ke default?')">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset ke Default
+          </button>
+        </form>
+      </div>
+
+      <!-- Body -->
+      <div class="card-body">
+        <form method="post">
+          {% for m in mappings %}
+          <div class="border rounded p-3 mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label for="alias_{{ m.target_field }}" class="form-label mb-0 fw-semibold small">
+                {{ m.field_label }}
+              </label>
+              <code class="small text-muted">{{ m.target_field }}</code>
+            </div>
+            <input type="text"
+                   id="alias_{{ m.target_field }}"
+                   name="alias_{{ m.target_field }}"
+                   value="{{ m.aliases }}"
+                   placeholder="Contoh: {{ m.target_field }}, header1, header2"
+                   class="form-control form-control-sm mb-2" />
+            <!-- Badges Preview -->
+            <div>
+              <small class="text-muted me-1">Kata kunci aktif:</small>
+              {% for alias in m.get_alias_list() %}
+              <span class="badge bg-light text-dark border me-1">{{ alias }}</span>
+              {% else %}
+              <span class="small text-danger fst-italic">Belum ada kata kunci</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+
+          <!-- Actions -->
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+            <a href="{{ url_for('main.index') }}" class="btn btn-secondary btn-sm">Batal</a>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-save me-1"></i>Simpan Pengaturan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

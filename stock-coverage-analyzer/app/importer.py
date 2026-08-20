@@ -12,7 +12,6 @@ NUMERIC_FIELDS = {
 
 
 def get_current_field_aliases() -> dict:
-    """Mengambil dict alias {canonical_field: [alias1, alias2, ...]} dari DB ColumnMapping."""
     field_aliases = {}
     try:
         mappings = ColumnMapping.query.all()
@@ -27,19 +26,16 @@ def get_current_field_aliases() -> dict:
             tf = m["target_field"]
             alias_str = m["aliases"]
             field_aliases[tf] = [a.strip().lower() for a in alias_str.split(",") if a.strip()]
-
     return field_aliases
 
 
 def _clean_header(header_str: str) -> str:
     if not isinstance(header_str, str):
         header_str = str(header_str)
-    cleaned = header_str.lower().strip()
-    return re.sub(r'[\s\-_]+', ' ', cleaned)
+    return re.sub(r'[\s\-_]+', ' ', header_str.lower().strip())
 
 
 def match_columns(df_columns: list) -> dict:
-    """Petakan header file Accurate ke field internal berdasarkan alias aktif."""
     mapped = {}
     cleaned_headers = {col: _clean_header(col) for col in df_columns}
     current_aliases = get_current_field_aliases()
@@ -59,9 +55,7 @@ def match_columns(df_columns: list) -> dict:
 
 
 def read_file_to_df(file_storage_or_path):
-    """Membaca file .xlsx, .xls, atau .csv menjadi pandas DataFrame."""
     filename = getattr(file_storage_or_path, 'filename', str(file_storage_or_path)).lower()
-
     if filename.endswith('.csv'):
         return pd.read_csv(file_storage_or_path)
     if filename.endswith('.xlsx') or filename.endswith('.xls'):
@@ -70,32 +64,25 @@ def read_file_to_df(file_storage_or_path):
 
 
 def _parse_numeric(value, kode, field, filename, warnings):
-    """Parse angka tanpa menyembunyikan anomali data menjadi nol."""
     try:
         parsed = int(float(value))
     except (ValueError, TypeError):
-        warnings.append(
-            f"SKU {kode} pada '{filename}': nilai '{field}' tidak valid ({value!r}); field diabaikan."
-        )
+        warnings.append(f"SKU {kode} pada '{filename}': nilai '{field}' tidak valid ({value!r}); field diabaikan.")
         return None
 
     if parsed < 0:
-        warnings.append(
-            f"SKU {kode} pada '{filename}': nilai '{field}' negatif ({parsed}); field diabaikan untuk mencegah koreksi data diam-diam."
-        )
+        warnings.append(f"SKU {kode} pada '{filename}': nilai '{field}' negatif ({parsed}); field diabaikan untuk mencegah koreksi data diam-diam.")
         return None
     return parsed
 
 
 def _set_merged_value(sku_data_map, source_map, kode, field, value, filename, warnings):
-    """Merge field per SKU. Konflik beda nilai dilaporkan dan nilai pertama dipertahankan."""
     if kode not in sku_data_map:
         sku_data_map[kode] = {}
         source_map[kode] = {}
 
     item = sku_data_map[kode]
     sources = source_map[kode]
-
     if field in item and item[field] != value:
         previous_source = sources.get(field, "file sebelumnya")
         warnings.append(
@@ -108,10 +95,7 @@ def _set_merged_value(sku_data_map, source_map, kode, field, value, filename, wa
 
 
 def process_uploaded_files(file_list) -> dict:
-    """
-    Proses multi-file Accurate, validasi, merge berdasarkan SKU, lalu upsert ke SQLite.
-    Return juga warnings agar Purchasing dapat menilai kualitas data import.
-    """
+    """Validasi, merge multi-file berdasarkan SKU, lalu upsert ke SQLite."""
     errors = []
     warnings = []
     created_count = 0
@@ -169,9 +153,7 @@ def process_uploaded_files(file_list) -> dict:
                         elif "LOKAL" in sup_str or "LOCAL" in sup_str:
                             value = "LOKAL"
                         else:
-                            warnings.append(
-                                f"SKU {kode} pada '{filename}': tipe supplier '{raw_value}' tidak dikenali; field diabaikan."
-                            )
+                            warnings.append(f"SKU {kode} pada '{filename}': tipe supplier '{raw_value}' tidak dikenali; field diabaikan.")
                             continue
                     elif field == "nama_barang":
                         value = str(raw_value).strip()
@@ -184,15 +166,14 @@ def process_uploaded_files(file_list) -> dict:
                     else:
                         value = raw_value
 
-                    _set_merged_value(
-                        sku_data_map, source_map, kode, field, value, filename, warnings
-                    )
+                    _set_merged_value(sku_data_map, source_map, kode, field, value, filename, warnings)
 
         except Exception as exc:
             errors.append(f"Gagal memproses file '{filename}': {exc}")
 
     if not sku_data_map:
         return {
+            "saved": False,
             "created": 0,
             "updated": 0,
             "total": 0,
@@ -206,11 +187,10 @@ def process_uploaded_files(file_list) -> dict:
         existing_sku = db.session.get(SKU, kode)
         if existing_sku:
             for field, value in data.items():
-                if field != "kode_barang":
-                    setattr(existing_sku, field, value)
+                setattr(existing_sku, field, value)
             updated_count += 1
         else:
-            new_sku = SKU(
+            db.session.add(SKU(
                 kode_barang=kode,
                 nama_barang=data.get("nama_barang", f"Barang {kode}"),
                 supplier=data.get("supplier", "LOKAL"),
@@ -221,10 +201,10 @@ def process_uploaded_files(file_list) -> dict:
                 penjualan_juni=data.get("penjualan_juni", 0),
                 penjualan_juli=data.get("penjualan_juli", 0),
                 penjualan_agustus=data.get("penjualan_agustus", 0),
-            )
-            db.session.add(new_sku)
+            ))
             created_count += 1
 
+    saved = True
     try:
         db.session.commit()
     except Exception as exc:
@@ -232,8 +212,10 @@ def process_uploaded_files(file_list) -> dict:
         errors.append(f"Gagal menyimpan ke database: {exc}")
         created_count = 0
         updated_count = 0
+        saved = False
 
     return {
+        "saved": saved,
         "created": created_count,
         "updated": updated_count,
         "total": len(sku_data_map),
@@ -245,32 +227,9 @@ def process_uploaded_files(file_list) -> dict:
 
 
 def generate_excel_template() -> io.BytesIO:
-    """Membuat template file Excel (.xlsx) contoh untuk dikirimkan ke user."""
     sample_data = [
-        {
-            "Kode Barang": "100118",
-            "Nama Barang": "Tempat Rak Bumbu Dapur 6IN1",
-            "Supplier": "IMPOR",
-            "Stok Gudang": 2400,
-            "Dipesan (PO)": 0,
-            "Dijual (SO)": 26,
-            "Penjualan Mei": 3953,
-            "Penjualan Juni": 3636,
-            "Penjualan Juli": 3329,
-            "Penjualan Agustus": 1273,
-        },
-        {
-            "Kode Barang": "100155",
-            "Nama Barang": "Senter Tangan SOLAR V-5020",
-            "Supplier": "LOKAL",
-            "Stok Gudang": 1844,
-            "Dipesan (PO)": 0,
-            "Dijual (SO)": 0,
-            "Penjualan Mei": 997,
-            "Penjualan Juni": 960,
-            "Penjualan Juli": 909,
-            "Penjualan Agustus": 288,
-        }
+        {"Kode Barang": "100118", "Nama Barang": "Tempat Rak Bumbu Dapur 6IN1", "Supplier": "IMPOR", "Stok Gudang": 2400, "Dipesan (PO)": 0, "Dijual (SO)": 26, "Penjualan Mei": 3953, "Penjualan Juni": 3636, "Penjualan Juli": 3329, "Penjualan Agustus": 1273},
+        {"Kode Barang": "100155", "Nama Barang": "Senter Tangan SOLAR V-5020", "Supplier": "LOKAL", "Stok Gudang": 1844, "Dipesan (PO)": 0, "Dijual (SO)": 0, "Penjualan Mei": 997, "Penjualan Juni": 960, "Penjualan Juli": 909, "Penjualan Agustus": 288},
     ]
     df = pd.DataFrame(sample_data)
     output = io.BytesIO()
@@ -281,11 +240,8 @@ def generate_excel_template() -> io.BytesIO:
 
 
 def export_analysis_to_excel(rows: list) -> io.BytesIO:
-    """Mengekspor daftar hasil analisis stock coverage ke file Excel .xlsx."""
     export_data = []
     for r in rows:
-        coverage_str = "N/A" if r["coverage_days"] is None else round(r["coverage_days"], 2)
-        ads_val = round(r["ads"], 2) if r["ads"] > 0 else 0
         export_data.append({
             "Kode Barang": r["kode_barang"],
             "Nama Barang": r["nama_barang"],
@@ -294,8 +250,8 @@ def export_analysis_to_excel(rows: list) -> io.BytesIO:
             "Dipesan (PO)": r["dipesan"],
             "Dijual (SO)": r["dijual"],
             "Stok Dapat Dijual": r["stok_dapat_dijual"],
-            "ADS (Harian)": ads_val,
-            "Coverage Days": coverage_str,
+            "ADS (Harian)": round(r["ads"], 2) if r["ads"] > 0 else 0,
+            "Coverage Days": "N/A" if r["coverage_days"] is None else round(r["coverage_days"], 2),
             "Lead Time": r["lead_time"],
             "Safety Stock Days": round(r["safety_stock_days"], 2),
             "Status": r["status"],

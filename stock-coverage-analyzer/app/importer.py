@@ -5,6 +5,12 @@ from .models import SKU, ColumnMapping
 from . import db
 
 
+NUMERIC_FIELDS = {
+    "stok_gudang", "dipesan", "dijual",
+    "penjualan_mei", "penjualan_juni", "penjualan_juli", "penjualan_agustus"
+}
+
+
 def get_current_field_aliases() -> dict:
     """Mengambil dict alias {canonical_field: [alias1, alias2, ...]} dari DB ColumnMapping."""
     field_aliases = {}
@@ -15,7 +21,6 @@ def get_current_field_aliases() -> dict:
     except Exception:
         pass
 
-    # Jika database belum berisi mapping, gunakan default bawaan
     if not field_aliases or "kode_barang" not in field_aliases:
         from .seed import DEFAULT_MAPPINGS
         for m in DEFAULT_MAPPINGS:
@@ -27,19 +32,14 @@ def get_current_field_aliases() -> dict:
 
 
 def _clean_header(header_str: str) -> str:
-    """Membersihkan string header: lowercase, strip, ganti karakter khusus."""
     if not isinstance(header_str, str):
         header_str = str(header_str)
     cleaned = header_str.lower().strip()
-    cleaned = re.sub(r'[\s\-_]+', ' ', cleaned)
-    return cleaned
+    return re.sub(r'[\s\-_]+', ' ', cleaned)
 
 
 def match_columns(df_columns: list) -> dict:
-    """
-    Memetakan nama kolom di DataFrame ke field internal aplikasi berdasarkan konfigurasi user di DB.
-    Mengembalikan dict: {canonical_field: df_column_name}
-    """
+    """Petakan header file Accurate ke field internal berdasarkan alias aktif."""
     mapped = {}
     cleaned_headers = {col: _clean_header(col) for col in df_columns}
     current_aliases = get_current_field_aliases()
@@ -47,8 +47,7 @@ def match_columns(df_columns: list) -> dict:
     for canonical, aliases in current_aliases.items():
         for col, cleaned_h in cleaned_headers.items():
             if col in mapped.values():
-                continue  # Kolom sudah terpakai
-            # Cek exact match atau substring match dengan alias
+                continue
             for alias in aliases:
                 cleaned_alias = _clean_header(alias)
                 if cleaned_alias and (cleaned_alias == cleaned_h or cleaned_alias in cleaned_h):
@@ -59,99 +58,156 @@ def match_columns(df_columns: list) -> dict:
     return mapped
 
 
-
-
 def read_file_to_df(file_storage_or_path):
     """Membaca file .xlsx, .xls, atau .csv menjadi pandas DataFrame."""
     filename = getattr(file_storage_or_path, 'filename', str(file_storage_or_path)).lower()
-    
+
     if filename.endswith('.csv'):
         return pd.read_csv(file_storage_or_path)
-    elif filename.endswith('.xlsx') or filename.endswith('.xls'):
+    if filename.endswith('.xlsx') or filename.endswith('.xls'):
         return pd.read_excel(file_storage_or_path)
-    else:
-        raise ValueError(f"Format file tidak didukung: {filename}. Gunakan .xlsx, .xls, atau .csv")
+    raise ValueError(f"Format file tidak didukung: {filename}. Gunakan .xlsx, .xls, atau .csv")
+
+
+def _parse_numeric(value, kode, field, filename, warnings):
+    """Parse angka tanpa menyembunyikan anomali data menjadi nol."""
+    try:
+        parsed = int(float(value))
+    except (ValueError, TypeError):
+        warnings.append(
+            f"SKU {kode} pada '{filename}': nilai '{field}' tidak valid ({value!r}); field diabaikan."
+        )
+        return None
+
+    if parsed < 0:
+        warnings.append(
+            f"SKU {kode} pada '{filename}': nilai '{field}' negatif ({parsed}); field diabaikan untuk mencegah koreksi data diam-diam."
+        )
+        return None
+    return parsed
+
+
+def _set_merged_value(sku_data_map, source_map, kode, field, value, filename, warnings):
+    """Merge field per SKU. Konflik beda nilai dilaporkan dan nilai pertama dipertahankan."""
+    if kode not in sku_data_map:
+        sku_data_map[kode] = {}
+        source_map[kode] = {}
+
+    item = sku_data_map[kode]
+    sources = source_map[kode]
+
+    if field in item and item[field] != value:
+        previous_source = sources.get(field, "file sebelumnya")
+        warnings.append(
+            f"Konflik SKU {kode}, field '{field}': {item[field]!r} dari '{previous_source}' vs {value!r} dari '{filename}'. Nilai pertama dipertahankan."
+        )
+        return
+
+    item[field] = value
+    sources[field] = filename
 
 
 def process_uploaded_files(file_list) -> dict:
     """
-    Memproses satu atau beberapa file laporan dari Accurate.
-    Menggabungkan data berdasarkan Kode Barang dan meng-upsert ke SQLite DB.
+    Proses multi-file Accurate, validasi, merge berdasarkan SKU, lalu upsert ke SQLite.
+    Return juga warnings agar Purchasing dapat menilai kualitas data import.
     """
     errors = []
+    warnings = []
     created_count = 0
     updated_count = 0
-    sku_data_map = {}  # {kode_barang: dict_of_fields}
+    processed_files = 0
+    skipped_rows = 0
+    sku_data_map = {}
+    source_map = {}
 
     for file_obj in file_list:
         if not file_obj or not getattr(file_obj, 'filename', ''):
             continue
 
+        filename = file_obj.filename
         try:
             df = read_file_to_df(file_obj)
+            processed_files += 1
             if df.empty:
+                warnings.append(f"File '{filename}' kosong dan dilewati.")
                 continue
 
             col_map = match_columns(df.columns.tolist())
-
             if "kode_barang" not in col_map:
-                errors.append(f"File '{file_obj.filename}' tidak memiliki kolom 'Kode Barang / SKU' yang dapat dikenali.")
+                errors.append(f"File '{filename}' tidak memiliki kolom 'Kode Barang / SKU' yang dapat dikenali.")
                 continue
 
-            for _, row in df.iterrows():
+            recognized_fields = sorted(set(col_map) - {"kode_barang"})
+            if not recognized_fields:
+                warnings.append(f"File '{filename}' hanya mengenali Kode Barang; tidak ada field data lain yang dapat dipetakan.")
+
+            for row_index, row in df.iterrows():
                 raw_kode = row[col_map["kode_barang"]]
                 if pd.isna(raw_kode) or not str(raw_kode).strip():
+                    skipped_rows += 1
+                    warnings.append(f"File '{filename}' baris {row_index + 2}: Kode Barang kosong; baris dilewati.")
                     continue
 
                 kode = str(raw_kode).strip()
-                # Jika SKU sudah ada di dict penggabungan sementara
                 if kode not in sku_data_map:
                     sku_data_map[kode] = {}
+                    source_map[kode] = {}
 
-                item_dict = sku_data_map[kode]
-
-                # Petakan field yang ditemukan di file ini
                 for field in [
                     "nama_barang", "supplier", "stok_gudang", "dipesan", "dijual",
                     "penjualan_mei", "penjualan_juni", "penjualan_juli", "penjualan_agustus"
                 ]:
-                    if field in col_map and not pd.isna(row[col_map[field]]):
-                        val = row[col_map[field]]
-                        if field == "supplier":
-                            sup_str = str(val).upper().strip()
-                            item_dict[field] = "IMPOR" if "IMPOR" in sup_str or "IMPORT" in sup_str else "LOKAL"
-                        elif field == "nama_barang":
-                            item_dict[field] = str(val).strip()
-                        else:
-                            try:
-                                item_dict[field] = max(0, int(float(val)))
-                            except (ValueError, TypeError):
-                                item_dict[field] = 0
+                    if field not in col_map or pd.isna(row[col_map[field]]):
+                        continue
 
-        except Exception as e:
-            errors.append(f"Gagal memproses file '{getattr(file_obj, 'filename', 'unknown')}': {str(e)}")
+                    raw_value = row[col_map[field]]
+                    if field == "supplier":
+                        sup_str = str(raw_value).upper().strip()
+                        if "IMPOR" in sup_str or "IMPORT" in sup_str:
+                            value = "IMPOR"
+                        elif "LOKAL" in sup_str or "LOCAL" in sup_str:
+                            value = "LOKAL"
+                        else:
+                            warnings.append(
+                                f"SKU {kode} pada '{filename}': tipe supplier '{raw_value}' tidak dikenali; field diabaikan."
+                            )
+                            continue
+                    elif field == "nama_barang":
+                        value = str(raw_value).strip()
+                        if not value:
+                            continue
+                    elif field in NUMERIC_FIELDS:
+                        value = _parse_numeric(raw_value, kode, field, filename, warnings)
+                        if value is None:
+                            continue
+                    else:
+                        value = raw_value
+
+                    _set_merged_value(
+                        sku_data_map, source_map, kode, field, value, filename, warnings
+                    )
+
+        except Exception as exc:
+            errors.append(f"Gagal memproses file '{filename}': {exc}")
 
     if not sku_data_map:
         return {
             "created": 0,
             "updated": 0,
             "total": 0,
-            "errors": errors if errors else ["Tidak ada data SKU valid yang ditemukan dalam file."]
+            "processed_files": processed_files,
+            "skipped_rows": skipped_rows,
+            "warnings": warnings,
+            "errors": errors if errors else ["Tidak ada data SKU valid yang ditemukan dalam file."],
         }
 
-    # Upsert data ke Database SQLite
     for kode, data in sku_data_map.items():
-        existing_sku = SKU.query.get(kode)
+        existing_sku = db.session.get(SKU, kode)
         if existing_sku:
-            if "nama_barang" in data: existing_sku.nama_barang = data["nama_barang"]
-            if "supplier" in data: existing_sku.supplier = data["supplier"]
-            if "stok_gudang" in data: existing_sku.stok_gudang = data["stok_gudang"]
-            if "dipesan" in data: existing_sku.dipesan = data["dipesan"]
-            if "dijual" in data: existing_sku.dijual = data["dijual"]
-            if "penjualan_mei" in data: existing_sku.penjualan_mei = data["penjualan_mei"]
-            if "penjualan_juni" in data: existing_sku.penjualan_juni = data["penjualan_juni"]
-            if "penjualan_juli" in data: existing_sku.penjualan_juli = data["penjualan_juli"]
-            if "penjualan_agustus" in data: existing_sku.penjualan_agustus = data["penjualan_agustus"]
+            for field, value in data.items():
+                if field != "kode_barang":
+                    setattr(existing_sku, field, value)
             updated_count += 1
         else:
             new_sku = SKU(
@@ -171,15 +227,20 @@ def process_uploaded_files(file_list) -> dict:
 
     try:
         db.session.commit()
-    except Exception as e:
+    except Exception as exc:
         db.session.rollback()
-        errors.append(f"Gagal menyimpan ke database: {str(e)}")
+        errors.append(f"Gagal menyimpan ke database: {exc}")
+        created_count = 0
+        updated_count = 0
 
     return {
         "created": created_count,
         "updated": updated_count,
         "total": len(sku_data_map),
-        "errors": errors
+        "processed_files": processed_files,
+        "skipped_rows": skipped_rows,
+        "warnings": warnings,
+        "errors": errors,
     }
 
 
@@ -235,6 +296,8 @@ def export_analysis_to_excel(rows: list) -> io.BytesIO:
             "Stok Dapat Dijual": r["stok_dapat_dijual"],
             "ADS (Harian)": ads_val,
             "Coverage Days": coverage_str,
+            "Lead Time": r["lead_time"],
+            "Safety Stock Days": round(r["safety_stock_days"], 2),
             "Status": r["status"],
             "Rekomendasi": r["rekomendasi"],
         })

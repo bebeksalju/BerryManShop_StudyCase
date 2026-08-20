@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from . import db
 from sqlalchemy.orm import validates
 
@@ -66,3 +68,42 @@ class ColumnMapping(db.Model):
         """Menyimpan list alias menjadi string tersimpan dipisahkan koma."""
         self.aliases = ", ".join([a.strip() for a in alias_list if a.strip()])
 
+
+class AnalysisSetting(db.Model):
+    """Parameter periode analisis agar formula study case tidak terkunci pada satu tanggal."""
+
+    __tablename__ = "analysis_setting"
+
+    id = db.Column(db.Integer, primary_key=True, default=1)
+    period_label = db.Column(db.String(100), nullable=False, default="Agustus 2026")
+    days_elapsed = db.Column(db.Integer, nullable=False, default=15)
+    days_in_month = db.Column(db.Integer, nullable=False, default=31)
+    historical_days = db.Column(db.Integer, nullable=False, default=92)
+
+    @property
+    def total_days(self):
+        return self.historical_days + self.days_in_month
+
+    def to_dict(self):
+        return {
+            "period_label": self.period_label,
+            "days_elapsed": self.days_elapsed,
+            "days_in_month": self.days_in_month,
+            "historical_days": self.historical_days,
+            "total_days": self.total_days,
+        }
+
+
+class ImportLog(db.Model):
+    """Ringkasan import terakhir untuk memastikan freshness dan audit sederhana data Purchasing."""
+
+    __tablename__ = "import_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    imported_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    file_count = db.Column(db.Integer, nullable=False, default=0)
+    total_skus = db.Column(db.Integer, nullable=False, default=0)
+    created_count = db.Column(db.Integer, nullable=False, default=0)
+    updated_count = db.Column(db.Integer, nullable=False, default=0)
+    warning_count = db.Column(db.Integer, nullable=False, default=0)
+    error_count = db.Column(db.Integer, nullable=False, default=0)

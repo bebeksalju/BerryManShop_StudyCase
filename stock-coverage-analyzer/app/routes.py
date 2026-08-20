@@ -26,7 +26,6 @@ def get_analysis_setting():
     return setting
 
 
-# ─── Dashboard & Tabel Analisis ───────────────────────────────────────────────
 @bp.route("/")
 def index():
     search = request.args.get("search", "").strip()
@@ -39,9 +38,7 @@ def index():
     query = SKU.query
     if search:
         like = f"%{search}%"
-        query = query.filter(
-            or_(SKU.kode_barang.ilike(like), SKU.nama_barang.ilike(like))
-        )
+        query = query.filter(or_(SKU.kode_barang.ilike(like), SKU.nama_barang.ilike(like)))
     if filter_supplier in ("IMPOR", "LOKAL"):
         query = query.filter(SKU.supplier == filter_supplier)
 
@@ -59,7 +56,6 @@ def index():
     }
 
     last_import = ImportLog.query.order_by(ImportLog.imported_at.desc()).first()
-
     return render_template(
         "index.html",
         rows=rows,
@@ -72,7 +68,6 @@ def index():
     )
 
 
-# ─── Tambah SKU ───────────────────────────────────────────────────────────────
 @bp.route("/sku/add", methods=["GET", "POST"])
 def add_sku():
     if request.method == "POST":
@@ -105,7 +100,6 @@ def add_sku():
     return render_template("form_sku.html", sku=None, action="Tambah")
 
 
-# ─── Edit SKU ─────────────────────────────────────────────────────────────────
 @bp.route("/sku/<kode>/edit", methods=["GET", "POST"])
 def edit_sku(kode):
     sku = db.get_or_404(SKU, kode)
@@ -131,7 +125,6 @@ def edit_sku(kode):
     return render_template("form_sku.html", sku=sku, action="Edit")
 
 
-# ─── Hapus SKU ─────────────────────────────────────────────────────────────────
 @bp.route("/sku/<kode>/delete", methods=["POST"])
 def delete_sku(kode):
     sku = db.get_or_404(SKU, kode)
@@ -141,7 +134,6 @@ def delete_sku(kode):
     return redirect(url_for("main.index"))
 
 
-# ─── Smart Impor Accurate ──────────────────────────────────────────────────────
 @bp.route("/import", methods=["GET", "POST"])
 def import_accurate():
     if request.method == "POST":
@@ -164,7 +156,7 @@ def import_accurate():
         db.session.add(log)
         db.session.commit()
 
-        if result["total"] > 0:
+        if result["saved"]:
             flash(
                 f"Import selesai: {result['processed_files']} file, {result['total']} SKU "
                 f"(baru {result['created']}, diperbarui {result['updated']}).",
@@ -178,11 +170,10 @@ def import_accurate():
                 f"Masih ada {len(result['warnings']) - 5} warning lain. Periksa data sumber sebelum mengambil keputusan Purchasing.",
                 "warning",
             )
-
         for error in result["errors"][:5]:
             flash(error, "danger")
 
-        if result["total"] > 0:
+        if result["saved"]:
             return redirect(url_for("main.index"))
         return render_template("import.html", result=result)
 
@@ -200,7 +191,6 @@ def download_template():
     )
 
 
-# ─── Ekspor Hasil Analisis Excel ──────────────────────────────────────────────
 @bp.route("/export")
 def export_excel():
     analysis = get_analysis_setting().to_dict()
@@ -214,7 +204,6 @@ def export_excel():
     )
 
 
-# ─── Pengaturan Pemetaan Kolom & Periode Analisis ─────────────────────────────
 @bp.route("/settings", methods=["GET", "POST"])
 def settings():
     seed_default_mappings(force_reset=False)
@@ -241,7 +230,6 @@ def settings():
             analysis_setting.days_elapsed = days_elapsed
             analysis_setting.days_in_month = days_in_month
             analysis_setting.historical_days = historical_days
-
             db.session.commit()
             flash("Pengaturan analisis dan pemetaan kolom berhasil disimpan.", "success")
             return redirect(url_for("main.settings"))
@@ -249,11 +237,7 @@ def settings():
             db.session.rollback()
             flash(f"Gagal menyimpan pengaturan: {exc}", "danger")
 
-    return render_template(
-        "settings.html",
-        mappings=mappings,
-        analysis_setting=analysis_setting,
-    )
+    return render_template("settings.html", mappings=mappings, analysis_setting=analysis_setting)
 
 
 @bp.route("/settings/reset", methods=["POST"])

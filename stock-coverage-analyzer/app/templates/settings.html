@@ -1,35 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Pengaturan Pemetaan Kolom – Stock Coverage Analyzer{% endblock %}
+{% block title %}Pengaturan Analisis – Stock Coverage Analyzer{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-9">
 
-    <!-- BREADCRUMB -->
     <nav aria-label="breadcrumb" class="mb-3">
       <ol class="breadcrumb small">
         <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
-        <li class="breadcrumb-item active">Pengaturan Pemetaan Kolom</li>
+        <li class="breadcrumb-item active">Pengaturan Analisis</li>
       </ol>
     </nav>
 
-    <div class="card">
-      <!-- Header -->
-      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
-        <div>
-          <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Pengaturan Pemetaan Kolom Accurate</h5>
-          <small class="text-muted">Tentukan kata kunci nama kolom dari file Accurate. Pisahkan dengan koma ( , ).</small>
+    <form method="post">
+      <div class="card mb-3">
+        <div class="card-header bg-white">
+          <h5 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Periode Analisis</h5>
+          <small class="text-muted">Default mengikuti dataset study case. Ubah hanya jika laporan bulan berjalan menggunakan cut-off yang berbeda.</small>
         </div>
-        <form method="post" action="{{ url_for('main.reset_settings') }}" onsubmit="return confirm('Yakin ingin mengembalikan seluruh pemetaan kolom ke default?')">
-          <button type="submit" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset ke Default
-          </button>
-        </form>
+        <div class="card-body">
+          <div class="alert alert-info small">
+            Formula tetap sama: Proyeksi bulan berjalan = (penjualan bulan berjalan ÷ hari berjalan) × jumlah hari bulan. ADS membagi 3 bulan historis + proyeksi bulan berjalan dengan total hari analisis.
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="period_label" class="form-label">Label Periode</label>
+              <input type="text" id="period_label" name="period_label" class="form-control"
+                     value="{{ analysis_setting.period_label }}" placeholder="Contoh: Agustus 2026">
+            </div>
+            <div class="col-md-2">
+              <label for="days_elapsed" class="form-label">Hari Berjalan</label>
+              <input type="number" id="days_elapsed" name="days_elapsed" min="1" max="31" class="form-control"
+                     value="{{ analysis_setting.days_elapsed }}" required>
+            </div>
+            <div class="col-md-2">
+              <label for="days_in_month" class="form-label">Hari/Bulan</label>
+              <input type="number" id="days_in_month" name="days_in_month" min="1" max="31" class="form-control"
+                     value="{{ analysis_setting.days_in_month }}" required>
+            </div>
+            <div class="col-md-2">
+              <label for="historical_days" class="form-label">Hari Historis</label>
+              <input type="number" id="historical_days" name="historical_days" min="1" class="form-control"
+                     value="{{ analysis_setting.historical_days }}" required>
+            </div>
+          </div>
+          <div class="mt-3 small text-muted">
+            Total hari ADS saat ini: <strong>{{ analysis_setting.total_days }} hari</strong>. Untuk dataset awal: 92 hari historis + 31 hari bulan berjalan = 123 hari.
+          </div>
+        </div>
       </div>
 
-      <!-- Body -->
-      <div class="card-body">
-        <form method="post">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
+          <div>
+            <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Pemetaan Kolom Accurate</h5>
+            <small class="text-muted">Tentukan kata kunci nama kolom file Accurate. Pisahkan dengan koma.</small>
+          </div>
+        </div>
+
+        <div class="card-body">
           {% for m in mappings %}
           <div class="border rounded p-3 mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
@@ -43,8 +72,7 @@
                    name="alias_{{ m.target_field }}"
                    value="{{ m.aliases }}"
                    placeholder="Contoh: {{ m.target_field }}, header1, header2"
-                   class="form-control form-control-sm mb-2" />
-            <!-- Badges Preview -->
+                   class="form-control form-control-sm mb-2">
             <div>
               <small class="text-muted me-1">Kata kunci aktif:</small>
               {% for alias in m.get_alias_list() %}
@@ -56,16 +84,22 @@
           </div>
           {% endfor %}
 
-          <!-- Actions -->
-          <div class="d-flex justify-content-end gap-2 pt-3 border-top">
-            <a href="{{ url_for('main.index') }}" class="btn btn-secondary btn-sm">Batal</a>
-            <button type="submit" class="btn btn-primary btn-sm">
-              <i class="bi bi-save me-1"></i>Simpan Pengaturan
+          <div class="d-flex justify-content-between gap-2 pt-3 border-top flex-wrap">
+            <button type="submit" formaction="{{ url_for('main.reset_settings') }}" formmethod="post"
+                    class="btn btn-outline-secondary btn-sm"
+                    onclick="return confirm('Yakin ingin mengembalikan pemetaan kolom ke default?')">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Pemetaan Kolom
             </button>
+            <div class="d-flex gap-2">
+              <a href="{{ url_for('main.index') }}" class="btn btn-secondary btn-sm">Batal</a>
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-save me-1"></i>Simpan Pengaturan
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
       </div>
-    </div>
+    </form>
 
   </div>
 </div>

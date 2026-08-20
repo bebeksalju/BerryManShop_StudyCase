@@ -3,168 +3,108 @@
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-8">
-
-    <!-- BREADCRUMB -->
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
-        <li class="breadcrumb-item active">{{ action }} SKU</li>
-      </ol>
-    </nav>
+  <div class="col-xl-9 col-lg-10">
+    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+      <div>
+        <h1 class="h4 mb-1">{{ action }} SKU</h1>
+        <p class="text-muted mb-0 small">{% if action == 'Edit' %}Perbarui informasi dan data stok SKU.{% else %}Tambahkan data SKU untuk dianalisis pada dashboard.{% endif %}</p>
+      </div>
+      <a href="{{ url_for('main.import_accurate') }}" class="btn btn-outline-primary btn-sm d-none d-md-inline-flex align-items-center gap-1">
+        <i class="bi bi-upload"></i> Impor Accurate
+      </a>
+    </div>
 
     <div class="card">
-      <!-- Header -->
-      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
-        <div>
-          <h5 class="mb-0">
-            {% if action == 'Edit' %}
-            <i class="bi bi-pencil-square me-1"></i>
-            {% else %}
-            <i class="bi bi-plus-circle me-1"></i>
-            {% endif %}
-            {{ action }} Data SKU
-          </h5>
-          <small class="text-muted">
-            {% if action == 'Edit' %}Perbarui informasi dan data stok SKU{% else %}Tambahkan SKU baru ke dalam sistem{% endif %}
-          </small>
-        </div>
-        <a href="{{ url_for('main.import_accurate') }}" class="btn btn-outline-primary btn-sm">
-          <i class="bi bi-upload me-1"></i>Impor Accurate
-        </a>
-      </div>
-
-      <!-- Body -->
-      <div class="card-body">
+      <div class="card-body p-md-4">
         <form method="post" id="sku-form" novalidate>
-
-          <!-- Identitas Barang -->
-          <h6 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-tag me-1"></i>Identitas Barang</h6>
-          <div class="row g-3 mb-4">
-            <div class="col-md-4">
-              <label for="kode_barang" class="form-label small">Kode Barang <span class="text-danger">*</span></label>
-              <input type="text" id="kode_barang" name="kode_barang"
-                     value="{{ sku.kode_barang if sku else '' }}"
-                     {% if action == 'Edit' %}readonly{% endif %}
-                     placeholder="Contoh: 100118"
-                     class="form-control form-control-sm {% if action == 'Edit' %}bg-light{% endif %}"
-                     required />
-              {% if action == 'Edit' %}
-              <small class="text-muted"><i class="bi bi-lock me-1"></i>Tidak dapat diubah</small>
-              {% endif %}
+          <section class="mb-4">
+            <h2 class="h6 border-bottom pb-2 mb-3"><i class="bi bi-tag me-1 text-primary"></i>Identitas Barang</h2>
+            <div class="row g-3">
+              <div class="col-12 col-md-4">
+                <label for="kode_barang" class="form-label small">Kode Barang <span class="text-danger">*</span></label>
+                <input type="text" id="kode_barang" name="kode_barang" value="{{ sku.kode_barang if sku else '' }}" {% if action == 'Edit' %}readonly{% endif %} placeholder="Contoh: 100118" class="form-control {% if action == 'Edit' %}bg-light{% endif %}" required>
+                {% if action == 'Edit' %}<small class="text-muted"><i class="bi bi-lock me-1"></i>Tidak dapat diubah</small>{% endif %}
+              </div>
+              <div class="col-12 col-md-8">
+                <label for="nama_barang" class="form-label small">Nama Barang <span class="text-danger">*</span></label>
+                <input type="text" id="nama_barang" name="nama_barang" value="{{ sku.nama_barang if sku else '' }}" class="form-control" placeholder="Nama lengkap barang" required>
+              </div>
             </div>
-            <div class="col-md-8">
-              <label for="nama_barang" class="form-label small">Nama Barang <span class="text-danger">*</span></label>
-              <input type="text" id="nama_barang" name="nama_barang"
-                     value="{{ sku.nama_barang if sku else '' }}"
-                     class="form-control form-control-sm"
-                     placeholder="Nama lengkap barang" required />
-            </div>
-          </div>
+          </section>
 
-          <!-- Tipe Supplier -->
-          <h6 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-truck me-1"></i>Tipe Supplier</h6>
-          <div class="row g-3 mb-4">
-            <div class="col-6">
-              <div class="form-check border rounded p-3">
-                <input type="radio" name="supplier" id="sup-lokal" value="LOKAL"
-                       class="form-check-input"
-                       {% if not sku or sku.supplier == 'LOKAL' %}checked{% endif %} />
-                <label class="form-check-label" for="sup-lokal">
-                  <strong>LOKAL</strong> <span class="badge bg-success bg-opacity-10 text-success border">15 Hari</span>
-                  <br><small class="text-muted">Lead time supplier dalam negeri</small>
+          <section class="mb-4">
+            <h2 class="h6 border-bottom pb-2 mb-3"><i class="bi bi-truck me-1 text-primary"></i>Tipe Supplier</h2>
+            <div class="row g-2 g-md-3">
+              <div class="col-12 col-sm-6">
+                <label class="border rounded-3 p-3 d-flex gap-2 align-items-start h-100 w-100" for="sup-lokal" style="cursor:pointer">
+                  <input type="radio" name="supplier" id="sup-lokal" value="LOKAL" class="form-check-input mt-1" {% if not sku or sku.supplier == 'LOKAL' %}checked{% endif %}>
+                  <span><strong>LOKAL</strong> <span class="badge bg-success bg-opacity-10 text-success border">15 Hari</span><br><small class="text-muted">Lead time supplier dalam negeri</small></span>
+                </label>
+              </div>
+              <div class="col-12 col-sm-6">
+                <label class="border rounded-3 p-3 d-flex gap-2 align-items-start h-100 w-100" for="sup-impor" style="cursor:pointer">
+                  <input type="radio" name="supplier" id="sup-impor" value="IMPOR" class="form-check-input mt-1" {% if sku and sku.supplier == 'IMPOR' %}checked{% endif %}>
+                  <span><strong>IMPOR</strong> <span class="badge bg-primary bg-opacity-10 text-primary border">80 Hari</span><br><small class="text-muted">Lead time supplier luar negeri</small></span>
                 </label>
               </div>
             </div>
-            <div class="col-6">
-              <div class="form-check border rounded p-3">
-                <input type="radio" name="supplier" id="sup-impor" value="IMPOR"
-                       class="form-check-input"
-                       {% if sku and sku.supplier == 'IMPOR' %}checked{% endif %} />
-                <label class="form-check-label" for="sup-impor">
-                  <strong>IMPOR</strong> <span class="badge bg-primary bg-opacity-10 text-primary border">80 Hari</span>
-                  <br><small class="text-muted">Lead time supplier luar negeri</small>
-                </label>
+          </section>
+
+          <section class="mb-4">
+            <h2 class="h6 border-bottom pb-2 mb-3"><i class="bi bi-box-seam me-1 text-primary"></i>Kondisi Stok</h2>
+            <div class="row g-3">
+              <div class="col-12 col-md-4">
+                <label for="stok_gudang" class="form-label small">Stok Gudang</label>
+                <input type="number" id="stok_gudang" name="stok_gudang" min="0" value="{{ sku.stok_gudang if sku else 0 }}" class="form-control">
+                <small class="text-muted">Unit fisik di gudang</small>
+              </div>
+              <div class="col-12 col-md-4">
+                <label for="dipesan" class="form-label small">Dipesan (PO)</label>
+                <input type="number" id="dipesan" name="dipesan" min="0" value="{{ sku.dipesan if sku else 0 }}" class="form-control">
+                <small class="text-muted">Sudah dipesan ke supplier</small>
+              </div>
+              <div class="col-12 col-md-4">
+                <label for="dijual" class="form-label small">Dijual (SO)</label>
+                <input type="number" id="dijual" name="dijual" min="0" value="{{ sku.dijual if sku else 0 }}" class="form-control">
+                <small class="text-muted">Sudah dialokasikan ke customer</small>
               </div>
             </div>
-          </div>
+          </section>
 
-          <!-- Kondisi Stok -->
-          <h6 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-box-seam me-1"></i>Kondisi Stok</h6>
-          <div class="row g-3 mb-4">
-            <div class="col-md-4">
-              <label for="stok_gudang" class="form-label small">Stok Gudang</label>
-              <input type="number" id="stok_gudang" name="stok_gudang" min="0"
-                     value="{{ sku.stok_gudang if sku else 0 }}"
-                     class="form-control form-control-sm" />
-              <small class="text-muted">Unit di gudang</small>
+          <section class="mb-4">
+            <h2 class="h6 border-bottom pb-2 mb-2"><i class="bi bi-bar-chart me-1 text-primary"></i>Data Penjualan</h2>
+            <p class="small text-muted mb-3">Digunakan untuk menghitung Average Daily Sales (ADS).</p>
+            <div class="row g-3">
+              <div class="col-6 col-md-3">
+                <label for="penjualan_mei" class="form-label small">Mei</label>
+                <input type="number" id="penjualan_mei" name="penjualan_mei" min="0" value="{{ sku.penjualan_mei if sku else 0 }}" class="form-control">
+              </div>
+              <div class="col-6 col-md-3">
+                <label for="penjualan_juni" class="form-label small">Juni</label>
+                <input type="number" id="penjualan_juni" name="penjualan_juni" min="0" value="{{ sku.penjualan_juni if sku else 0 }}" class="form-control">
+              </div>
+              <div class="col-6 col-md-3">
+                <label for="penjualan_juli" class="form-label small">Juli</label>
+                <input type="number" id="penjualan_juli" name="penjualan_juli" min="0" value="{{ sku.penjualan_juli if sku else 0 }}" class="form-control">
+              </div>
+              <div class="col-6 col-md-3">
+                <label for="penjualan_agustus" class="form-label small">Agustus <span class="badge bg-info bg-opacity-10 text-info border">berjalan</span></label>
+                <input type="number" id="penjualan_agustus" name="penjualan_agustus" min="0" value="{{ sku.penjualan_agustus if sku else 0 }}" class="form-control">
+              </div>
             </div>
-            <div class="col-md-4">
-              <label for="dipesan" class="form-label small">Dipesan (PO)</label>
-              <input type="number" id="dipesan" name="dipesan" min="0"
-                     value="{{ sku.dipesan if sku else 0 }}"
-                     class="form-control form-control-sm" />
-              <small class="text-muted">Dalam perjalanan</small>
-            </div>
-            <div class="col-md-4">
-              <label for="dijual" class="form-label small">Dijual (SO)</label>
-              <input type="number" id="dijual" name="dijual" min="0"
-                     value="{{ sku.dijual if sku else 0 }}"
-                     class="form-control form-control-sm" />
-              <small class="text-muted">Pesanan pending</small>
-            </div>
-          </div>
+          </section>
 
-          <!-- Data Penjualan -->
-          <h6 class="text-muted border-bottom pb-2 mb-3"><i class="bi bi-bar-chart me-1"></i>Data Penjualan (Unit)</h6>
-          <p class="small text-muted mb-3">4 bulan terakhir untuk menghitung Average Daily Sales (ADS)</p>
-          <div class="row g-3 mb-4">
-            <div class="col-6 col-md-3">
-              <label for="penjualan_mei" class="form-label small">Mei</label>
-              <input type="number" id="penjualan_mei" name="penjualan_mei" min="0"
-                     value="{{ sku.penjualan_mei if sku else 0 }}"
-                     class="form-control form-control-sm" />
-            </div>
-            <div class="col-6 col-md-3">
-              <label for="penjualan_juni" class="form-label small">Juni</label>
-              <input type="number" id="penjualan_juni" name="penjualan_juni" min="0"
-                     value="{{ sku.penjualan_juni if sku else 0 }}"
-                     class="form-control form-control-sm" />
-            </div>
-            <div class="col-6 col-md-3">
-              <label for="penjualan_juli" class="form-label small">Juli</label>
-              <input type="number" id="penjualan_juli" name="penjualan_juli" min="0"
-                     value="{{ sku.penjualan_juli if sku else 0 }}"
-                     class="form-control form-control-sm" />
-            </div>
-            <div class="col-6 col-md-3">
-              <label for="penjualan_agustus" class="form-label small">
-                Agustus <span class="badge bg-info bg-opacity-10 text-info border">berjalan</span>
-              </label>
-              <input type="number" id="penjualan_agustus" name="penjualan_agustus" min="0"
-                     value="{{ sku.penjualan_agustus if sku else 0 }}"
-                     class="form-control form-control-sm" />
-            </div>
+          <div class="d-grid d-sm-flex justify-content-sm-end gap-2 pt-3 border-top">
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary order-2 order-sm-1" id="btn-batal">Batal</a>
+            <button type="submit" class="btn btn-primary order-1 order-sm-2" id="btn-simpan"><i class="bi bi-save me-1"></i>Simpan Data</button>
           </div>
-
-          <!-- Actions -->
-          <div class="d-flex justify-content-end gap-2 pt-3 border-top">
-            <a href="{{ url_for('main.index') }}" class="btn btn-secondary btn-sm" id="btn-batal">Batal</a>
-            <button type="submit" class="btn btn-primary btn-sm" id="btn-simpan">
-              <i class="bi bi-save me-1"></i>Simpan Data
-            </button>
-          </div>
-
         </form>
       </div>
     </div>
 
-    <!-- Helper info -->
-    <div class="small text-muted mt-3">
-      <i class="bi bi-info-circle me-1"></i>
-      Coverage dihitung otomatis: <code>Stok Dapat Dijual ÷ ADS</code>. ADS = rata-rata penjualan harian 4 bulan terakhir.
+    <div class="small text-muted mt-3 px-1">
+      <i class="bi bi-info-circle me-1"></i>Coverage dihitung otomatis setelah data disimpan.
     </div>
-
   </div>
 </div>
 {% endblock %}

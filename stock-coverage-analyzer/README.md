@@ -1,117 +1,163 @@
 # Stock Coverage Analyzer
 
-Web application MVP untuk membantu tim Purchasing memantau kondisi stok SKU, mengotomatiskan pengolahan data harian dari **Accurate ERP** (dengan **Pengaturan Pemetaan Kolom Fleksibel** & **Unlimited File Upload**), dan menentukan prioritas reorder secara instan.
+Web application MVP untuk membantu tim Purchasing mengurangi proses analisa stok manual dari laporan **Accurate ERP**. Fokus aplikasi adalah mengubah data stok, outstanding PO/SO, dan histori penjualan menjadi **stock coverage** serta prioritas tindakan: `Critical`, `Need Order`, `Sufficient`, atau `No Sales Data`.
 
----
+## Problem yang Diselesaikan
 
-## 🛠️ Stack & Teknologi
+Pada study case, Purchasing setiap pagi perlu mengambil beberapa laporan dari Accurate, memodifikasi/menggabungkannya di Excel, lalu melakukan analisa untuk mengetahui SKU mana yang membutuhkan perhatian.
 
-- **Backend**: Python 3.11 + Flask + Pandas
-- **Database**: SQLite (persisten via Volume Docker)
-- **Frontend**: HTML5 + Tailwind CSS + Lucide Icons
-- **Deployment**: Docker & Docker Compose
-
----
-
-## 📁 Struktur Folder Project
+Workflow aplikasi:
 
 ```text
-stock-coverage-analyzer/
-├── app/
-│   ├── __init__.py           # Flask App Factory & database init
-│   ├── calculator.py         # Formula metrik ADS, Safety Stock, Coverage & Status
-│   ├── importer.py           # Smart Parser (Dynamic Column Mapping, Unlimited Multi-file merge)
-│   ├── models.py             # Model SQLAlchemy SKU & ColumnMapping
-│   ├── routes.py             # Route Dashboard, CRUD SKU, Smart Import, Settings & Export
-│   ├── seed.py               # Auto-seeding data contoh & default column mappings
-│   ├── static/
-│   │   └── js/main.js        # Interaktivitas JS (modal hapus, auto filter, validasi number)
-│   └── templates/
-│       ├── base.html         # Layout utama + Navbar + Navigasi Settings
-│       ├── form_sku.html     # Form Tambah & Edit Data SKU
-│       ├── import.html       # UI Smart Upload Laporan Accurate (Drag & Drop)
-│       ├── index.html        # Dashboard & Tabel Analisis Stock Coverage
-│       └── settings.html     # UI Pengaturan Pemetaan Kolom Accurate
-├── Dockerfile                # Konfigurasi containerization Python 3.11
-├── docker-compose.yml        # Orchestration Docker service & volume SQLite
-├── requirements.txt          # Dependensi Flask, Pandas, Openpyxl, dll.
-├── run.py                    # Entry point aplikasi Flask
-├── test_importer.py          # Script pengujian otomatis Smart Impor Multi-File
-├── test_settings_importer.py# Script pengujian otomatis Dynamic Column Mapping
-└── README.md                 # Dokumentasi proyek
+Laporan Accurate
+      ↓
+Upload Multi-File
+      ↓
+Validasi Header & Nilai
+      ↓
+Merge berdasarkan SKU
+      ↓
+Hitung ADS & Stock Coverage
+      ↓
+Prioritas: Critical / Need Order / Sufficient
+      ↓
+Purchasing Action
 ```
 
----
+## Requirement Mapping
 
-## ✨ Fitur-Fitur Utama
+| Requirement Study Case | Implementasi |
+|---|---|
+| Import/input data SKU | Smart multi-file import + CRUD SKU |
+| Menyimpan data | SQLite + SQLAlchemy |
+| Menghitung Stock Coverage | `app/calculator.py` |
+| Menampilkan SKU berdasarkan kondisi stok | Priority-first dashboard |
+| Filter/search SKU | Search kode/nama + filter supplier/status |
+| Rekomendasi reorder sederhana | Rekomendasi otomatis berdasarkan coverage |
 
-1. **Pengaturan Pemetaan Kolom Accurate (`/settings`)**:
-   - User/Purchasing dapat secara bebas menentukan nama header kolom file dari Accurate.
-   - Contoh: Menentukan bahwa kolom `Kode Barang` di Accurate perusahaan Anda bernama `Kode Accurate`, `No_Induk_Barang`, atau `Item_Code`.
-   - Kata kunci tersimpan di database SQLite (`column_mapping`), dilengkapi tombol **Reset ke Default**.
-2. **Smart Impor Accurate (Unlimited Multi-File Upload)**:
-   - Mendukung pengunggahan **file Excel/CSV dalam jumlah berapa pun (bebas berapa pun file)** sekaligus (`.xlsx`, `.xls`, `.csv`).
-   - Engine parser akan membaca semua file, memetakan header berdasarkan pengaturan user, dan secara otomatis menggabungkan data berdasarkan `Kode SKU`.
-3. **Dashboard Summary & Alerts**:
-   - Indicator Card: Total SKU, Critical, Need Order, Sufficient, dan No Sales Data.
-   - Peringatan Otomatis (Red Alert) jika ada barang berstatus `Critical`.
-4. **Tabel Analisis Stock Coverage**:
-   - Menampilkan Stok Gudang, Dipesan (PO), Dijual (SO), Stok Dapat Dijual, ADS, Coverage Days (2 desimal), Status & Rekomendasi.
-   - Urutan Default: `Critical` → `Need Order` → `Sufficient` → `No Sales Data`.
-5. **Ekspor Hasil Analisis ke Excel**:
-   - Download hasil kalkulasi coverage terbaru ke file `.xlsx` untuk laporan Manajemen.
-6. **Manajemen Data SKU (CRUD)**:
-   - Tambah, Edit, dan Hapus SKU dengan konfirmasi modal.
+## Stack
 
----
+- Backend: Python 3.11, Flask, SQLAlchemy, Pandas
+- Database: SQLite
+- Frontend: Jinja2, Bootstrap 5, Bootstrap Icons
+- Deployment: Docker & Docker Compose
 
-## 📐 Formula & Metrik Perhitungan
+## Fitur Utama
 
-| Metrik | Formula | Keterangan |
+1. **Smart Import Accurate**
+   - `.xlsx`, `.xls`, `.csv`
+   - multi-file upload
+   - dynamic column aliases
+   - merge berdasarkan SKU
+   - warning untuk nilai negatif/invalid
+   - conflict detection antar-file agar tidak silent overwrite
+
+2. **Configurable Analysis Period**
+   - default tetap mengikuti dataset study case: Agustus 2026, hari berjalan 15, 31 hari/bulan, 92 hari historis
+   - parameter dapat diubah melalui `/settings` tanpa mengubah formula inti
+
+3. **Priority Dashboard**
+   - Critical → Need Order → Sufficient → No Sales Data
+   - search/filter SKU
+   - last import timestamp
+   - jumlah file/SKU pada import terakhir
+   - warning indicator
+   - penjelasan "Kenapa status ini?" per SKU
+
+4. **Export Excel**
+   - hasil coverage
+   - lead time
+   - safety stock days
+   - status dan rekomendasi
+
+## Formula
+
+Default dataset study case:
+
+```text
+Stok Dapat Dijual = Stok Gudang - Dijual
+
+Proyeksi Bulan Berjalan
+= (Penjualan Bulan Berjalan / Hari Berjalan) × Jumlah Hari Bulan
+
+ADS
+= (Penjualan 3 Bulan Historis + Proyeksi Bulan Berjalan) / Total Hari Analisis
+
+Safety Stock Days
+= Lead Time × 20%
+
+Coverage Days
+= (Stok Dapat Dijual + Dipesan) / ADS
+```
+
+Lead time sesuai study case:
+
+```text
+IMPOR = 80 hari
+LOKAL = 15 hari
+```
+
+Status:
+
+| Status | Kondisi | Action |
 |---|---|---|
-| **Stok Dapat Dijual** | `Stok Gudang − Dijual` | Stok fisik bebas alokasi |
-| **Proyeksi Agustus** | `(Penjualan Agustus ÷ 15) × 31` | Asumsi 15 hari berjalan dari 31 hari |
-| **ADS (Average Daily Sales)** | `(Mei + Juni + Juli + Proyeksi Agustus) ÷ 123` | Total 123 hari (31+30+31+31) |
-| **Safety Stock Days** | `Lead Time × 20%` | IMPOR = 80 hari, LOKAL = 15 hari |
-| **Coverage Days** | `(Stok Dapat Dijual + Dipesan) ÷ ADS` | Ditampilkan dalam 2 angka desimal |
+| Critical | Coverage < Lead Time | Segera reorder |
+| Need Order | Lead Time ≤ Coverage < Lead Time + Safety | Review dan siapkan reorder |
+| Sufficient | Coverage ≥ Lead Time + Safety | Stok masih mencukupi |
+| No Sales Data | ADS = 0 | Evaluasi manual |
 
-### Ketentuan Status & Rekomendasi
+## Requirement vs Asumsi MVP
 
-| Status | Kondisi | Rekomendasi | Badge |
-|---|---|---|---|
-| 🔴 **Critical** | `Coverage Days < Lead Time` | Segera lakukan reorder | Merah |
-| 🟡 **Need Order** | `Lead Time ≤ Coverage Days < Lead Time + Safety Stock` | Disarankan melakukan reorder | Kuning |
-| 🟢 **Sufficient** | `Coverage Days ≥ Lead Time + Safety Stock` | Stok masih mencukupi | Hijau |
-| ⚫ **No Sales Data** | `ADS = 0` | Tidak ada data penjualan, evaluasi manual | Abu-abu |
+### Langsung dari study case
 
----
+- stok gudang
+- dipesan / outstanding PO
+- dijual / outstanding SO
+- histori penjualan 3 bulan + 1 bulan berjalan
+- lead time impor 80 hari
+- lead time lokal 15 hari
+- safety stock 20%
+- formula coverage dan status dasar
 
-## 🚀 Cara Menjalankan (Docker Compose)
+### Asumsi implementasi MVP
 
-### 1. Build & Jalankan Container
+- `Safety Stock Days = Lead Time × 20%`. Study case menyebut safety stock 20%, tetapi basis persentasenya perlu dikonfirmasi dengan stakeholder sebelum production.
+- default periode mengikuti contoh dataset Agustus dengan cut-off hari ke-15.
+- file dengan field SKU yang sama dan nilai berbeda dianggap konflik; sistem mempertahankan nilai pertama dan memberikan warning. Aturan merge final perlu divalidasi terhadap struktur 3 laporan Accurate asli perusahaan.
+
+## Menjalankan Aplikasi
+
 ```bash
 docker compose up -d --build
 ```
 
-### 2. Cek Status Container
-```bash
-docker compose ps
+Akses:
+
+```text
+Dashboard  : http://localhost:5000/
+Import     : http://localhost:5000/import
+Settings   : http://localhost:5000/settings
 ```
 
-### 3. Jalankan Pengujian Otomatis
+## Testing
+
 ```bash
-# Pengujian Impor Multi-File
+# Multi-file import + validation/conflict
 docker exec stock-coverage-analyzer python test_importer.py
 
-# Pengujian Dynamic Column Mapping Settings
+# Dynamic column mapping
 docker exec stock-coverage-analyzer python test_settings_importer.py
+
+# Formula dan boundary status
+docker exec stock-coverage-analyzer python test_calculator.py
 ```
 
----
+## Production Improvement yang Sengaja Belum Masuk MVP
 
-## 🌐 Akses Aplikasi
+- validasi langsung terhadap format 3 export Accurate asli perusahaan
+- ETA outstanding PO untuk mendeteksi projected stockout sebelum barang datang
+- reorder quantity, MOQ, budget, supplier pack size
+- authentication/role-based access
+- integrasi langsung Accurate API
 
-Buka browser: **[http://localhost:5000](http://localhost:5000)**
-- **Dashboard**: `http://localhost:5000/`
-- **Smart Impor**: `http://localhost:5000/import`
-- **Pengaturan Kolom**: `http://localhost:5000/settings`
+Fitur-fitur tersebut tidak ditambahkan ke MVP karena data/rule pendukungnya tidak tersedia pada study case dan sebaiknya divalidasi bersama user Purchasing terlebih dahulu.

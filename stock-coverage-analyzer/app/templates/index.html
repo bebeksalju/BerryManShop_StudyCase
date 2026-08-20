@@ -1,32 +1,77 @@
 {% extends "base.html" %}
 {% block title %}Dashboard – Stock Coverage Analyzer{% endblock %}
 
+{% block styles %}
+<style>
+  .summary-card .value { font-size: 1.6rem; font-weight: 700; }
+  .mobile-sku-card { border-left-width: 4px; }
+  .mobile-sku-card.status-critical { border-left-color: #dc3545; }
+  .mobile-sku-card.status-warning { border-left-color: #ffc107; }
+  .mobile-sku-card.status-success { border-left-color: #198754; }
+  .mobile-sku-card.status-secondary { border-left-color: #6c757d; }
+  .mobile-metric {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .mobile-metric .label { color: #6b7280; font-size: 11px; }
+  .mobile-metric .value { font-weight: 700; margin-top: 2px; }
+  .sticky-mobile-filter {
+    position: sticky;
+    top: 64px;
+    z-index: 1000;
+  }
+  @media (min-width: 768px) {
+    .sticky-mobile-filter { position: static; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
+
+<div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h4 mb-1">Dashboard Purchasing</h1>
+    <p class="text-muted mb-0 small">Prioritas SKU berdasarkan stock coverage, lead time, dan safety stock.</p>
+  </div>
+  <a href="{{ url_for('main.export_excel') }}" class="btn btn-outline-success btn-sm d-none d-md-inline-flex align-items-center gap-1">
+    <i class="bi bi-file-earmark-excel"></i> Ekspor
+  </a>
+</div>
 
 <!-- DATA FRESHNESS & ANALYSIS PERIOD -->
 <div class="card mb-3 border-primary-subtle">
-  <div class="card-body py-2">
-    <div class="row g-2 align-items-center small">
-      <div class="col-md-5">
-        <i class="bi bi-calendar3 me-1 text-primary"></i>
-        <strong>Periode Analisis:</strong> {{ analysis.period_label }}
-        <span class="text-muted">• hari ke-{{ analysis.days_elapsed }} dari {{ analysis.days_in_month }}</span>
+  <div class="card-body py-3">
+    <div class="row g-3 align-items-center small">
+      <div class="col-12 col-lg-5">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-calendar3 text-primary mt-1"></i>
+          <div>
+            <div class="text-muted">Periode Analisis</div>
+            <strong>{{ analysis.period_label }}</strong>
+            <div class="text-muted">Hari ke-{{ analysis.days_elapsed }} dari {{ analysis.days_in_month }}</div>
+          </div>
+        </div>
       </div>
-      <div class="col-md-5">
-        <i class="bi bi-clock-history me-1 text-primary"></i>
-        <strong>Data Terakhir:</strong>
-        {% if last_import %}
-          {{ last_import.imported_at.strftime('%d-%m-%Y %H:%M') }}
-          <span class="text-muted">• {{ last_import.file_count }} file • {{ last_import.total_skus }} SKU</span>
-          {% if last_import.warning_count > 0 %}
-          <span class="badge bg-warning text-dark ms-1">{{ last_import.warning_count }} warning</span>
-          {% endif %}
-        {% else %}
-          <span class="text-muted">Belum ada riwayat import pada database ini</span>
-        {% endif %}
+      <div class="col-12 col-lg-5">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-clock-history text-primary mt-1"></i>
+          <div>
+            <div class="text-muted">Data Terakhir</div>
+            {% if last_import %}
+              <strong>{{ last_import.imported_at.strftime('%d-%m-%Y %H:%M') }}</strong>
+              <div class="text-muted">{{ last_import.file_count }} file • {{ last_import.total_skus }} SKU</div>
+              {% if last_import.warning_count > 0 %}
+              <span class="badge bg-warning text-dark mt-1">{{ last_import.warning_count }} warning</span>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">Belum ada riwayat import</span>
+            {% endif %}
+          </div>
+        </div>
       </div>
-      <div class="col-md-2 text-md-end">
-        <a href="{{ url_for('main.settings') }}" class="btn btn-outline-secondary btn-sm py-0">
+      <div class="col-12 col-lg-2 text-lg-end">
+        <a href="{{ url_for('main.settings') }}" class="btn btn-outline-secondary btn-sm w-100 w-lg-auto">
           <i class="bi bi-gear me-1"></i>Atur Periode
         </a>
       </div>
@@ -35,79 +80,149 @@
 </div>
 
 {% if summary.critical > 0 %}
-<div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
-  <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+<div class="alert alert-danger d-flex align-items-start gap-2 mb-3" role="alert">
+  <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
   <div>
-    <strong>Peringatan Reorder!</strong>
-    Terdapat <strong>{{ summary.critical }} SKU</strong> dengan status
-    <span class="badge bg-danger">Critical</span> karena coverage berada di bawah lead time.
+    <strong>{{ summary.critical }} SKU Critical</strong>
+    <div class="small">Coverage berada di bawah lead time. Prioritaskan pengecekan dan reorder.</div>
   </div>
 </div>
 {% endif %}
 
 <!-- SUMMARY CARDS -->
-<div class="row g-3 mb-3">
+<div class="row g-2 g-md-3 mb-3">
   <div class="col-6 col-md-4 col-xl">
-    <div class="card h-100"><div class="card-body text-center"><div class="text-muted small mb-1">Total SKU</div><div class="fs-3 fw-bold">{{ summary.total }}</div></div></div>
+    <div class="card h-100 summary-card"><div class="card-body"><div class="text-muted small">Total SKU</div><div class="value">{{ summary.total }}</div></div></div>
   </div>
   <div class="col-6 col-md-4 col-xl">
-    <div class="card h-100 {% if summary.critical > 0 %}border-danger{% endif %}"><div class="card-body text-center"><div class="text-muted small mb-1">Critical</div><div class="fs-3 fw-bold text-danger">{{ summary.critical }}</div></div></div>
+    <div class="card h-100 summary-card {% if summary.critical > 0 %}border-danger{% endif %}"><div class="card-body"><div class="text-muted small">Critical</div><div class="value text-danger">{{ summary.critical }}</div></div></div>
   </div>
   <div class="col-6 col-md-4 col-xl">
-    <div class="card h-100"><div class="card-body text-center"><div class="text-muted small mb-1">Need Order</div><div class="fs-3 fw-bold text-warning">{{ summary.need_order }}</div></div></div>
+    <div class="card h-100 summary-card"><div class="card-body"><div class="text-muted small">Need Order</div><div class="value text-warning">{{ summary.need_order }}</div></div></div>
   </div>
   <div class="col-6 col-md-4 col-xl">
-    <div class="card h-100"><div class="card-body text-center"><div class="text-muted small mb-1">Sufficient</div><div class="fs-3 fw-bold text-success">{{ summary.sufficient }}</div></div></div>
+    <div class="card h-100 summary-card"><div class="card-body"><div class="text-muted small">Sufficient</div><div class="value text-success">{{ summary.sufficient }}</div></div></div>
   </div>
-  <div class="col-6 col-md-4 col-xl">
-    <div class="card h-100"><div class="card-body text-center"><div class="text-muted small mb-1">No Sales Data</div><div class="fs-3 fw-bold text-secondary">{{ summary.no_sales }}</div></div></div>
+  <div class="col-12 col-md-4 col-xl">
+    <div class="card h-100 summary-card"><div class="card-body"><div class="text-muted small">No Sales Data</div><div class="value text-secondary">{{ summary.no_sales }}</div></div></div>
   </div>
 </div>
 
 <!-- FILTER BAR -->
-<div class="card mb-3">
+<div class="card mb-3 sticky-mobile-filter">
   <div class="card-body">
     <form method="get" action="{{ url_for('main.index') }}" id="filter-form">
       <div class="row g-2 align-items-end">
-        <div class="col-md-5">
+        <div class="col-12 col-md-5">
           <label for="search" class="form-label small text-muted mb-1">Cari Barang</label>
-          <input id="search" type="text" name="search" value="{{ search }}" class="form-control form-control-sm" placeholder="Kode atau nama barang…" autocomplete="off">
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input id="search" type="text" name="search" value="{{ search }}" class="form-control" placeholder="Kode atau nama barang" autocomplete="off">
+          </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label for="supplier" class="form-label small text-muted mb-1">Supplier</label>
-          <select id="supplier" name="supplier" class="form-select form-select-sm">
-            <option value="">Semua Supplier</option>
+          <select id="supplier" name="supplier" class="form-select">
+            <option value="">Semua</option>
             <option value="IMPOR" {% if filter_supplier == 'IMPOR' %}selected{% endif %}>IMPOR</option>
             <option value="LOKAL" {% if filter_supplier == 'LOKAL' %}selected{% endif %}>LOKAL</option>
           </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label for="status" class="form-label small text-muted mb-1">Status</label>
-          <select id="status" name="status" class="form-select form-select-sm">
-            <option value="">Semua Status</option>
+          <select id="status" name="status" class="form-select">
+            <option value="">Semua</option>
             <option value="Critical" {% if filter_status == 'Critical' %}selected{% endif %}>Critical</option>
             <option value="Need Order" {% if filter_status == 'Need Order' %}selected{% endif %}>Need Order</option>
             <option value="Sufficient" {% if filter_status == 'Sufficient' %}selected{% endif %}>Sufficient</option>
             <option value="No Sales Data" {% if filter_status == 'No Sales Data' %}selected{% endif %}>No Sales Data</option>
           </select>
         </div>
-        <div class="col-md-1">
-          <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-funnel"></i></button>
+        <div class="col-12 col-md-1">
+          <button type="submit" class="btn btn-primary w-100" aria-label="Terapkan filter"><i class="bi bi-funnel"></i><span class="d-md-none ms-1">Terapkan Filter</span></button>
         </div>
       </div>
       {% if search or filter_supplier or filter_status %}
-      <div class="mt-2 d-flex align-items-center gap-2">
+      <div class="mt-2 d-flex align-items-center justify-content-between gap-2">
         <small class="text-muted">Menampilkan <strong>{{ rows|length }}</strong> hasil</small>
-        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary btn-sm py-0 px-2"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</a>
       </div>
       {% endif %}
     </form>
   </div>
 </div>
 
-<!-- DATA TABLE -->
-<div class="card mb-3">
-  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white">
+<!-- MOBILE SKU CARDS -->
+<div class="d-md-none mb-3">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="mobile-section-title">Prioritas SKU</div>
+    <span class="badge text-bg-light border">{{ rows|length }} item</span>
+  </div>
+
+  {% if rows %}
+    <div class="d-grid gap-3">
+      {% for r in rows %}
+      <article class="card mobile-sku-card {% if r.badge == 'danger' %}status-critical{% elif r.badge == 'warning' %}status-warning{% elif r.badge == 'success' %}status-success{% else %}status-secondary{% endif %}">
+        <div class="card-body">
+          <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+            <div class="min-w-0">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <code>{{ r.kode_barang }}</code>
+                {% if r.supplier == 'IMPOR' %}<span class="badge bg-primary bg-opacity-10 text-primary border">IMPOR</span>{% else %}<span class="badge bg-success bg-opacity-10 text-success border">LOKAL</span>{% endif %}
+              </div>
+              <h2 class="h6 mb-0">{{ r.nama_barang }}</h2>
+            </div>
+            <div class="text-end flex-shrink-0">
+              {% if r.badge == 'danger' %}<span class="badge bg-danger">Critical</span>
+              {% elif r.badge == 'warning' %}<span class="badge bg-warning text-dark">Need Order</span>
+              {% elif r.badge == 'success' %}<span class="badge bg-success">Sufficient</span>
+              {% else %}<span class="badge bg-secondary">No Data</span>{% endif %}
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-4"><div class="mobile-metric"><div class="label">Coverage</div><div class="value {% if r.badge == 'danger' %}text-danger{% elif r.badge == 'warning' %}text-warning{% elif r.badge == 'success' %}text-success{% endif %}">{% if r.coverage_days is none %}N/A{% else %}{{ "%.1f"|format(r.coverage_days) }} hr{% endif %}</div></div></div>
+            <div class="col-4"><div class="mobile-metric"><div class="label">ADS</div><div class="value">{% if r.ads == 0 %}—{% else %}{{ "%.1f"|format(r.ads) }}{% endif %}</div></div></div>
+            <div class="col-4"><div class="mobile-metric"><div class="label">Stok Bisa Dijual</div><div class="value">{{ "{:,}".format(r.stok_dapat_dijual) }}</div></div></div>
+          </div>
+
+          <div class="small mb-2">
+            <span class="text-muted">Rekomendasi</span>
+            <div class="fw-semibold">{{ r.rekomendasi }}</div>
+          </div>
+
+          <details class="small border rounded-3 p-2 mb-3 bg-light">
+            <summary class="fw-semibold" style="cursor:pointer">Lihat alasan status</summary>
+            <div class="pt-2 text-muted">
+              Stok dapat dijual = {{ "{:,}".format(r.stok_gudang) }} − {{ "{:,}".format(r.dijual) }} = <strong>{{ "{:,}".format(r.stok_dapat_dijual) }}</strong><br>
+              ADS = <strong>{{ "%.2f"|format(r.ads) }}</strong> unit/hari<br>
+              {% if r.coverage_days is not none %}
+              Coverage = <strong>{{ "%.2f"|format(r.coverage_days) }} hari</strong><br>
+              Lead Time = <strong>{{ r.lead_time }} hari</strong><br>
+              Safety = <strong>{{ "%.0f"|format(r.safety_stock_days) }} hari</strong><br>
+              Batas aman = <strong>{{ "%.0f"|format(r.safe_threshold) }} hari</strong>
+              {% else %}
+              Coverage tidak dihitung karena ADS = 0.
+              {% endif %}
+            </div>
+          </details>
+
+          <div class="d-grid gap-2" style="grid-template-columns: 1fr 1fr;">
+            <a href="{{ url_for('main.edit_sku', kode=r.kode_barang) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil me-1"></i>Edit</a>
+            <button type="button" class="btn btn-outline-danger btn-sm btn-hapus" data-kode="{{ r.kode_barang }}" data-nama="{{ r.nama_barang }}"><i class="bi bi-trash me-1"></i>Hapus</button>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card"><div class="card-body text-center py-5 text-muted"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Tidak ada data yang ditemukan.<a href="{{ url_for('main.index') }}" class="d-block mt-2">Reset filter</a></div></div>
+  {% endif %}
+</div>
+
+<!-- DESKTOP/TABLET DATA TABLE -->
+<div class="card mb-3 d-none d-md-block">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white py-3">
     <h6 class="mb-0"><i class="bi bi-table me-1"></i>Prioritas Stock Coverage <span class="text-muted fw-normal">({{ rows|length }} SKU)</span></h6>
     <div class="d-flex gap-2">
       <a href="{{ url_for('main.import_accurate') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-upload me-1"></i>Impor Accurate</a>
@@ -164,8 +279,8 @@
               </details>
             </td>
             <td class="text-center text-nowrap">
-              <a href="{{ url_for('main.edit_sku', kode=r.kode_barang) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit"><i class="bi bi-pencil"></i></a>
-              <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 btn-hapus" data-kode="{{ r.kode_barang }}" data-nama="{{ r.nama_barang }}" title="Hapus"><i class="bi bi-trash"></i></button>
+              <a href="{{ url_for('main.edit_sku', kode=r.kode_barang) }}" class="btn btn-sm btn-outline-secondary py-1 px-2" title="Edit"><i class="bi bi-pencil"></i></a>
+              <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 btn-hapus" data-kode="{{ r.kode_barang }}" data-nama="{{ r.nama_barang }}" title="Hapus"><i class="bi bi-trash"></i></button>
             </td>
           </tr>
           {% endfor %}
@@ -177,7 +292,7 @@
   </div>
 </div>
 
-<div class="d-flex flex-wrap gap-3 mb-3 small text-muted">
+<div class="d-none d-md-flex flex-wrap gap-3 mb-3 small text-muted">
   <span><span class="badge bg-danger me-1">&nbsp;</span>Critical: Coverage &lt; Lead Time</span>
   <span><span class="badge bg-warning me-1">&nbsp;</span>Need Order: Lead Time ≤ Coverage &lt; Lead Time + Safety</span>
   <span><span class="badge bg-success me-1">&nbsp;</span>Sufficient: Coverage ≥ Lead Time + Safety</span>
@@ -186,7 +301,7 @@
 
 <!-- DELETE MODAL -->
 <div class="modal fade" id="modalHapus" tabindex="-1">
-  <div class="modal-dialog modal-sm"><div class="modal-content">
+  <div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content">
     <div class="modal-header"><h6 class="modal-title"><i class="bi bi-trash text-danger me-1"></i>Konfirmasi Hapus</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body"><p>Yakin ingin menghapus SKU <strong id="modal-nama-sku"></strong>?</p><small class="text-muted"><i class="bi bi-info-circle me-1"></i>Tindakan ini tidak dapat dibatalkan.</small></div>
     <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" id="modal-cancel">Batal</button><form id="form-hapus" method="post" class="d-inline"><button type="submit" class="btn btn-sm btn-danger" id="btn-confirm-delete"><i class="bi bi-trash me-1"></i>Hapus</button></form></div>

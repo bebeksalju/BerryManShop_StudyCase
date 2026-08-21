@@ -94,12 +94,13 @@ def _set_merged_value(sku_data_map, source_map, kode, field, value, filename, wa
     sources[field] = filename
 
 
-def process_uploaded_files(file_list) -> dict:
-    """Validasi, merge multi-file berdasarkan SKU, lalu upsert ke SQLite."""
+def process_uploaded_files(file_list, replace_active=True) -> dict:
+    """Validasi dan merge multi-file. Import harian mengganti dataset aktif setelah data valid terbentuk."""
     errors = []
     warnings = []
     created_count = 0
     updated_count = 0
+    deleted_count = 0
     processed_files = 0
     skipped_rows = 0
     sku_data_map = {}
@@ -173,15 +174,14 @@ def process_uploaded_files(file_list) -> dict:
 
     if not sku_data_map:
         return {
-            "saved": False,
-            "created": 0,
-            "updated": 0,
-            "total": 0,
-            "processed_files": processed_files,
-            "skipped_rows": skipped_rows,
+            "saved": False, "created": 0, "updated": 0, "deleted": 0, "total": 0,
+            "processed_files": processed_files, "skipped_rows": skipped_rows,
             "warnings": warnings,
             "errors": errors if errors else ["Tidak ada data SKU valid yang ditemukan dalam file."],
         }
+
+    incoming_codes = set(sku_data_map.keys())
+    existing_codes = {row.kode_barang for row in SKU.query.all()}
 
     for kode, data in sku_data_map.items():
         existing_sku = db.session.get(SKU, kode)
@@ -204,20 +204,25 @@ def process_uploaded_files(file_list) -> dict:
             ))
             created_count += 1
 
+    if replace_active:
+        stale_codes = existing_codes - incoming_codes
+        if stale_codes:
+            deleted_count = SKU.query.filter(SKU.kode_barang.in_(stale_codes)).delete(synchronize_session=False)
+
     saved = True
     try:
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
         errors.append(f"Gagal menyimpan ke database: {exc}")
-        created_count = 0
-        updated_count = 0
+        created_count = updated_count = deleted_count = 0
         saved = False
 
     return {
         "saved": saved,
         "created": created_count,
         "updated": updated_count,
+        "deleted": deleted_count,
         "total": len(sku_data_map),
         "processed_files": processed_files,
         "skipped_rows": skipped_rows,
@@ -226,62 +231,54 @@ def process_uploaded_files(file_list) -> dict:
     }
 
 
-def generate_excel_template() -> io.BytesIO:
-    sample_data = [
-        {"Kode Barang": "100118", "Nama Barang": "Tempat Rak Bumbu Dapur 6IN1", "Supplier": "IMPOR", "Stok Gudang": 2400, "Dipesan (PO)": 0, "Dijual (SO)": 26, "Penjualan Mei": 3953, "Penjualan Juni": 3636, "Penjualan Juli": 3329, "Penjualan Agustus": 1273},
-        {"Kode Barang": "100155", "Nama Barang": "Senter Tangan SOLAR V-5020", "Supplier": "LOKAL", "Stok Gudang": 1844, "Dipesan (PO)": 0, "Dijual (SO)": 0, "Penjualan Mei": 997, "Penjualan Juni": 960, "Penjualan Juli": 909, "Penjualan Agustus": 288},
+def generate_excel_template():
+    columns = [
+        "Kode Barang", "Nama Barang", "Supplier", "Stok Gudang", "Dipesan", "Dijual",
+        "Penjualan Mei", "Penjualan Juni", "Penjualan Juli", "Penjualan Agustus"
     ]
-    df = pd.DataFrame(sample_data)
+    sample_data = [
+        ["SKU001", "Contoh Barang Impor", "IMPOR", 1000, 200, 100, 300, 350, 400, 200],
+        ["SKU002", "Contoh Barang Lokal", "LOKAL", 500, 100, 50, 200, 220, 250, 120],
+    ]
+    df = pd.DataFrame(sample_data, columns=columns)
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Master Stock Accurate")
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Master Stok")
     output.seek(0)
     return output
 
 
 def export_analysis_to_excel(rows: list) -> io.BytesIO:
-    export_data = []
+    data = []
     for r in rows:
-        if r["recommended_restock_qty"] is None:
-            restock_qty = "Evaluasi Manual"
-            restock_formula = "ADS = 0, kebutuhan restock tidak dihitung otomatis"
-        else:
-            restock_qty = r["recommended_restock_qty"]
-            restock_formula = (
-                f"max(0, ceil({r['ads']:.2f} x {r['safe_threshold']:.0f}) - "
-                f"({r['stok_dapat_dijual']} + {r['dipesan']})) = {r['recommended_restock_qty']}"
-            )
-
-        export_data.append({
+        data.append({
             "Kode Barang": r["kode_barang"],
             "Nama Barang": r["nama_barang"],
             "Supplier": r["supplier"],
             "Stok Gudang": r["stok_gudang"],
-            "Dipesan (PO)": r["dipesan"],
-            "Dijual (SO)": r["dijual"],
+            "Dipesan": r["dipesan"],
+            "Dijual": r["dijual"],
             "Stok Dapat Dijual": r["stok_dapat_dijual"],
-            "Stok + PO": r["projected_stock_units"],
-            "ADS (Harian)": round(r["ads"], 2) if r["ads"] > 0 else 0,
-            "Coverage Days": "N/A" if r["coverage_days"] is None else round(r["coverage_days"], 2),
-            "Lead Time": r["lead_time"],
-            "Safety Stock Days": round(r["safety_stock_days"], 2),
+            "ADS": round(r["ads"], 2),
+            "Coverage Days": round(r["coverage_days"], 2) if r["coverage_days"] is not None else "N/A",
+            "Lead Time (Hari)": r["lead_time"],
+            "Safety Stock (Hari)": round(r["safety_stock_days"], 2),
+            "Stok + PO": r["projected_stock"],
             "Batas Aman (Hari)": round(r["safe_threshold"], 2),
             "Target Stok Aman (Unit)": r["target_stock_units"] if r["target_stock_units"] is not None else "N/A",
-            "Rekomendasi Restock (Unit)": restock_qty,
-            "Perhitungan Restock": restock_formula,
+            "Rekomendasi Restock (Unit)": r["restock_qty"] if r["restock_qty"] is not None else "Evaluasi Manual",
+            "Perhitungan Restock": r["restock_formula"],
             "Status": r["status"],
             "Rekomendasi": r["rekomendasi"],
         })
 
-    df = pd.DataFrame(export_data)
+    df = pd.DataFrame(data)
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Hasil Analisis Coverage")
-        worksheet = writer.sheets["Hasil Analisis Coverage"]
-        worksheet.freeze_panes = "A2"
-        worksheet.auto_filter.ref = worksheet.dimensions
-        for column_cells in worksheet.columns:
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Analisis Coverage")
+        ws = writer.sheets["Analisis Coverage"]
+        for column_cells in ws.columns:
             max_length = max(len(str(cell.value or "")) for cell in column_cells)
-            worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 12), 45)
+            ws.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 12), 48)
     output.seek(0)
     return output

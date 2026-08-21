@@ -242,6 +242,16 @@ def generate_excel_template() -> io.BytesIO:
 def export_analysis_to_excel(rows: list) -> io.BytesIO:
     export_data = []
     for r in rows:
+        if r["recommended_restock_qty"] is None:
+            restock_qty = "Evaluasi Manual"
+            restock_formula = "ADS = 0, kebutuhan restock tidak dihitung otomatis"
+        else:
+            restock_qty = r["recommended_restock_qty"]
+            restock_formula = (
+                f"max(0, ceil({r['ads']:.2f} x {r['safe_threshold']:.0f}) - "
+                f"({r['stok_dapat_dijual']} + {r['dipesan']})) = {r['recommended_restock_qty']}"
+            )
+
         export_data.append({
             "Kode Barang": r["kode_barang"],
             "Nama Barang": r["nama_barang"],
@@ -250,10 +260,15 @@ def export_analysis_to_excel(rows: list) -> io.BytesIO:
             "Dipesan (PO)": r["dipesan"],
             "Dijual (SO)": r["dijual"],
             "Stok Dapat Dijual": r["stok_dapat_dijual"],
+            "Stok + PO": r["projected_stock_units"],
             "ADS (Harian)": round(r["ads"], 2) if r["ads"] > 0 else 0,
             "Coverage Days": "N/A" if r["coverage_days"] is None else round(r["coverage_days"], 2),
             "Lead Time": r["lead_time"],
             "Safety Stock Days": round(r["safety_stock_days"], 2),
+            "Batas Aman (Hari)": round(r["safe_threshold"], 2),
+            "Target Stok Aman (Unit)": r["target_stock_units"] if r["target_stock_units"] is not None else "N/A",
+            "Rekomendasi Restock (Unit)": restock_qty,
+            "Perhitungan Restock": restock_formula,
             "Status": r["status"],
             "Rekomendasi": r["rekomendasi"],
         })
@@ -262,5 +277,11 @@ def export_analysis_to_excel(rows: list) -> io.BytesIO:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name="Hasil Analisis Coverage")
+        worksheet = writer.sheets["Hasil Analisis Coverage"]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+        for column_cells in worksheet.columns:
+            max_length = max(len(str(cell.value or "")) for cell in column_cells)
+            worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 12), 45)
     output.seek(0)
     return output

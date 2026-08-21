@@ -1,3 +1,5 @@
+import math
+
 # ─── Default Study Case Parameters ───────────────────────────────────────────
 DEFAULT_ANALYSIS = {
     "period_label": "Agustus 2026",
@@ -65,8 +67,11 @@ def hitung_ads(mei: int, juni: int, juli: int, penjualan_agustus: int, analysis=
 
 def hitung_coverage(sku, analysis=None) -> dict:
     """
-    Hitung semua metrik coverage untuk satu SKU.
-    Formula inti tetap mengikuti study case.
+    Hitung metrik coverage dan rekomendasi restock untuk satu SKU.
+
+    Formula coverage tetap mengikuti study case.
+    Qty restock adalah extension MVP: sistem mengisi gap agar persediaan
+    mencapai target Lead Time + Safety Stock.
     """
     cfg = normalize_analysis(analysis)
     stok_dapat_dijual = sku.stok_gudang - sku.dijual
@@ -86,31 +91,40 @@ def hitung_coverage(sku, analysis=None) -> dict:
     lead_time = LEAD_TIME.get(sku.supplier, 15)
     safety_stock_days = lead_time * SAFETY_STOCK_PCT
     safe_threshold = lead_time + safety_stock_days
+    projected_stock_units = stok_dapat_dijual + sku.dipesan
 
     if ads == 0:
         coverage_days = None
+        target_stock_units = None
+        recommended_restock_qty = None
         status = "No Sales Data"
-        rekomendasi = "Tidak ada data penjualan, perlu evaluasi manual"
+        rekomendasi = "Tidak ada data penjualan; qty restock perlu evaluasi manual"
     else:
-        coverage_days = (stok_dapat_dijual + sku.dipesan) / ads
+        coverage_days = projected_stock_units / ads
+        target_stock_units = math.ceil(ads * safe_threshold)
+        recommended_restock_qty = max(0, target_stock_units - projected_stock_units)
+
         if coverage_days < lead_time:
             status = "Critical"
-            rekomendasi = "Segera lakukan reorder"
+            rekomendasi = f"Segera reorder sekitar {recommended_restock_qty:,} unit"
         elif coverage_days < safe_threshold:
             status = "Need Order"
-            rekomendasi = "Review dan siapkan reorder"
+            rekomendasi = f"Siapkan reorder sekitar {recommended_restock_qty:,} unit"
         else:
             status = "Sufficient"
-            rekomendasi = "Stok masih mencukupi"
+            rekomendasi = "Belum perlu restock"
 
     return {
         "stok_dapat_dijual": stok_dapat_dijual,
+        "projected_stock_units": projected_stock_units,
         "proyeksi_bulan_berjalan": proyeksi_bulan_berjalan,
         "ads": ads,
         "coverage_days": coverage_days,
         "lead_time": lead_time,
         "safety_stock_days": safety_stock_days,
         "safe_threshold": safe_threshold,
+        "target_stock_units": target_stock_units,
+        "recommended_restock_qty": recommended_restock_qty,
         "status": status,
         "rekomendasi": rekomendasi,
         "badge": STATUS_BADGE[status],

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}History Harian - Stock Coverage{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h4 class="mb-1"><i class="bi bi-clock-history me-2"></i>History Analisis Harian</h4>
+    <div class="text-muted">Dataset lama disimpan sebagai snapshot; dashboard utama selalu memakai data terbaru.</div>
+  </div>
+  {% if dates %}
+  <form method="get" class="d-flex gap-2 align-items-center">
+    <label class="small text-muted text-nowrap" for="history-date">Tanggal</label>
+    <select class="form-select" id="history-date" name="date" onchange="this.form.submit()">
+      {% for d in dates %}<option value="{{ d.isoformat() }}" {% if selected_date == d %}selected{% endif %}>{{ d.strftime('%d-%m-%Y') }}</option>{% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% if selected_date %}
+<div class="alert alert-info py-2"><i class="bi bi-archive me-1"></i>Menampilkan snapshot <strong>{{ selected_date.strftime('%d-%m-%Y') }}</strong>. Data ini hanya untuk histori dan tidak mengubah dashboard aktif.</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-6 col-lg"><div class="card h-100"><div class="card-body py-3"><div class="small text-muted">Total SKU</div><div class="fs-4 fw-bold">{{ summary.total }}</div></div></div></div>
+  <div class="col-6 col-lg"><div class="card h-100"><div class="card-body py-3"><div class="small text-muted">Critical</div><div class="fs-4 fw-bold text-danger">{{ summary.critical }}</div></div></div></div>
+  <div class="col-6 col-lg"><div class="card h-100"><div class="card-body py-3"><div class="small text-muted">Need Order</div><div class="fs-4 fw-bold text-warning">{{ summary.need_order }}</div></div></div></div>
+  <div class="col-6 col-lg"><div class="card h-100"><div class="card-body py-3"><div class="small text-muted">Sufficient</div><div class="fs-4 fw-bold text-success">{{ summary.sufficient }}</div></div></div></div>
+</div>
+
+<div class="d-md-none">
+  {% for r in rows %}
+  <div class="card mb-2"><div class="card-body">
+    <div class="d-flex justify-content-between gap-2"><div><code>{{ r.kode_barang }}</code><div class="fw-semibold">{{ r.nama_barang }}</div></div>
+      <div>{% if r.status == 'Critical' %}<span class="badge bg-danger">Critical</span>{% elif r.status == 'Need Order' %}<span class="badge bg-warning text-dark">Need Order</span>{% elif r.status == 'Sufficient' %}<span class="badge bg-success">Sufficient</span>{% else %}<span class="badge bg-secondary">No Data</span>{% endif %}</div></div>
+    <div class="row g-2 mt-2 small"><div class="col-4"><span class="text-muted d-block">Coverage</span><strong>{{ '%.2f'|format(r.coverage_days) if r.coverage_days is not none else 'N/A' }}</strong></div><div class="col-4"><span class="text-muted d-block">ADS</span><strong>{{ '%.2f'|format(r.ads) }}</strong></div><div class="col-4"><span class="text-muted d-block">Restock</span><strong>{{ r.restock_qty if r.restock_qty is not none else 'Manual' }}</strong></div></div>
+  </div></div>
+  {% endfor %}
+</div>
+
+<div class="card d-none d-md-block"><div class="table-responsive"><table class="table table-hover mb-0">
+  <thead><tr><th>SKU</th><th>Nama Barang</th><th>Supplier</th><th class="text-end">Stok</th><th class="text-end">Stok + PO</th><th class="text-end">ADS</th><th class="text-end">Coverage</th><th>Status</th><th class="text-end">Restock</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><td><code>{{ r.kode_barang }}</code></td><td>{{ r.nama_barang }}</td><td>{{ r.supplier }}</td><td class="text-end">{{ r.stok_gudang }}</td><td class="text-end">{{ r.projected_stock }}</td><td class="text-end">{{ '%.2f'|format(r.ads) }}</td><td class="text-end">{{ '%.2f'|format(r.coverage_days) if r.coverage_days is not none else 'N/A' }}</td><td>{{ r.status }}</td><td class="text-end fw-semibold">{{ r.restock_qty if r.restock_qty is not none else 'Manual' }}</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% else %}
+<div class="card"><div class="card-body text-center py-5 text-muted"><i class="bi bi-clock-history fs-1 d-block mb-2"></i><h6>Belum ada history</h6><p class="mb-0">Snapshot pertama akan terbentuk ketika dataset aktif diganti oleh import harian berikutnya.</p></div></div>
+{% endif %}
+{% endblock %}

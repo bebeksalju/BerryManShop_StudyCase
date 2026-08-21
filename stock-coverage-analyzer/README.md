@@ -1,6 +1,6 @@
 # Stock Coverage Analyzer
 
-Web application MVP untuk membantu tim Purchasing mengurangi proses analisa stok manual dari laporan **Accurate ERP**. Fokus aplikasi adalah mengubah data stok, outstanding PO/SO, dan histori penjualan menjadi **stock coverage** serta prioritas tindakan: `Critical`, `Need Order`, `Sufficient`, atau `No Sales Data`.
+Web application MVP untuk membantu tim Purchasing mengurangi proses analisa stok manual dari laporan **Accurate ERP**. Fokus aplikasi adalah mengubah data stok, outstanding PO/SO, dan histori penjualan menjadi **stock coverage**, prioritas tindakan, serta rekomendasi jumlah restock.
 
 ## Problem yang Diselesaikan
 
@@ -19,7 +19,9 @@ Merge berdasarkan SKU
       ↓
 Hitung ADS & Stock Coverage
       ↓
-Prioritas: Critical / Need Order / Sufficient
+Hitung Gap menuju Target Stok Aman
+      ↓
+Prioritas + Rekomendasi Restock
       ↓
 Purchasing Action
 ```
@@ -60,14 +62,15 @@ Purchasing Action
    - Critical → Need Order → Sufficient → No Sales Data
    - search/filter SKU
    - last import timestamp
-   - jumlah file/SKU pada import terakhir
-   - warning indicator
-   - penjelasan "Kenapa status ini?" per SKU
+   - penjelasan hitungan per SKU
+   - rekomendasi jumlah restock sampai target coverage aman
 
 4. **Export Excel**
    - hasil coverage
-   - lead time
-   - safety stock days
+   - lead time dan safety stock
+   - target stok aman
+   - rekomendasi restock
+   - rumus/perhitungan restock per SKU
    - status dan rekomendasi
 
 ## Formula
@@ -106,6 +109,40 @@ Status:
 | Sufficient | Coverage ≥ Lead Time + Safety | Stok masih mencukupi |
 | No Sales Data | ADS = 0 | Evaluasi manual |
 
+## Extension MVP: Rekomendasi Jumlah Restock
+
+Study case hanya meminta rekomendasi sederhana apakah SKU perlu reorder dan tidak memberikan formula kuantitas pembelian. Karena itu, qty restock di aplikasi adalah **asumsi tambahan yang transparan**, bukan formula asli dari study case.
+
+Target restock dibuat agar persediaan mencapai coverage aman:
+
+```text
+Batas Aman Hari = Lead Time + Safety Stock Days
+
+Target Stok Aman = ceil(ADS × Batas Aman Hari)
+
+Stok Proyeksi = Stok Dapat Dijual + Dipesan (PO)
+
+Rekomendasi Restock
+= max(0, Target Stok Aman - Stok Proyeksi)
+```
+
+Contoh:
+
+```text
+ADS              = 10 unit/hari
+Lead Time        = 15 hari
+Safety Stock     = 3 hari
+Batas Aman       = 18 hari
+Target Stok Aman = ceil(10 × 18) = 180 unit
+Stok Dapat Dijual= 100 unit
+PO               = 20 unit
+
+Restock = max(0, 180 - (100 + 20))
+        = 60 unit
+```
+
+Jika `ADS = 0`, sistem tidak menebak qty restock dan menampilkan **Evaluasi Manual**.
+
 ## Requirement vs Asumsi MVP
 
 ### Langsung dari study case
@@ -123,7 +160,8 @@ Status:
 
 - `Safety Stock Days = Lead Time × 20%`. Study case menyebut safety stock 20%, tetapi basis persentasenya perlu dikonfirmasi dengan stakeholder sebelum production.
 - default periode mengikuti contoh dataset Agustus dengan cut-off hari ke-15.
-- file dengan field SKU yang sama dan nilai berbeda dianggap konflik; sistem mempertahankan nilai pertama dan memberikan warning. Aturan merge final perlu divalidasi terhadap struktur 3 laporan Accurate asli perusahaan.
+- file dengan field SKU yang sama dan nilai berbeda dianggap konflik; sistem mempertahankan nilai pertama dan memberikan warning.
+- rekomendasi qty restock menargetkan coverage `Lead Time + Safety Stock`; rule ini perlu dikonfirmasi dengan Purchasing sebelum digunakan sebagai quantity PO final.
 
 ## Menjalankan Aplikasi
 
@@ -148,7 +186,7 @@ docker exec stock-coverage-analyzer python test_importer.py
 # Dynamic column mapping
 docker exec stock-coverage-analyzer python test_settings_importer.py
 
-# Formula dan boundary status
+# Formula, boundary status, dan rekomendasi restock
 docker exec stock-coverage-analyzer python test_calculator.py
 ```
 
@@ -156,7 +194,7 @@ docker exec stock-coverage-analyzer python test_calculator.py
 
 - validasi langsung terhadap format 3 export Accurate asli perusahaan
 - ETA outstanding PO untuk mendeteksi projected stockout sebelum barang datang
-- reorder quantity, MOQ, budget, supplier pack size
+- MOQ / supplier pack size / budget purchasing untuk membulatkan quantity PO final
 - authentication/role-based access
 - integrasi langsung Accurate API
 

@@ -9,7 +9,7 @@ class SKU(db.Model):
 
     kode_barang = db.Column(db.String(50), primary_key=True)
     nama_barang = db.Column(db.String(200), nullable=False)
-    supplier = db.Column(db.String(10), nullable=False)  # IMPOR | LOKAL
+    supplier = db.Column(db.String(10), nullable=False)
 
     stok_gudang = db.Column(db.Integer, nullable=False, default=0)
     dipesan = db.Column(db.Integer, nullable=False, default=0)
@@ -59,13 +59,11 @@ class ColumnMapping(db.Model):
     aliases = db.Column(db.Text, nullable=False, default="")
 
     def get_alias_list(self):
-        """Mengembalikan daftar alias dalam bentuk list string lowercase."""
         if not self.aliases:
             return []
         return [a.strip().lower() for a in self.aliases.split(",") if a.strip()]
 
     def set_alias_list(self, alias_list):
-        """Menyimpan list alias menjadi string tersimpan dipisahkan koma."""
         self.aliases = ", ".join([a.strip() for a in alias_list if a.strip()])
 
 
@@ -95,7 +93,7 @@ class AnalysisSetting(db.Model):
 
 
 class ImportLog(db.Model):
-    """Ringkasan import terakhir untuk memastikan freshness dan audit sederhana data Purchasing."""
+    """Ringkasan import untuk memastikan freshness dan audit sederhana data Purchasing."""
 
     __tablename__ = "import_log"
 
@@ -107,3 +105,30 @@ class ImportLog(db.Model):
     updated_count = db.Column(db.Integer, nullable=False, default=0)
     warning_count = db.Column(db.Integer, nullable=False, default=0)
     error_count = db.Column(db.Integer, nullable=False, default=0)
+
+
+class DailySnapshot(db.Model):
+    """Salinan dataset aktif sebelum diganti import berikutnya; dashboard tetap memakai tabel SKU terbaru."""
+
+    __tablename__ = "daily_snapshot"
+    __table_args__ = (
+        db.UniqueConstraint("snapshot_date", "kode_barang", name="uq_snapshot_date_sku"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    snapshot_date = db.Column(db.Date, nullable=False, index=True)
+    captured_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    kode_barang = db.Column(db.String(50), nullable=False, index=True)
+    nama_barang = db.Column(db.String(200), nullable=False)
+    supplier = db.Column(db.String(10), nullable=False)
+    stok_gudang = db.Column(db.Integer, nullable=False, default=0)
+    dipesan = db.Column(db.Integer, nullable=False, default=0)
+    dijual = db.Column(db.Integer, nullable=False, default=0)
+    penjualan_mei = db.Column(db.Integer, nullable=False, default=0)
+    penjualan_juni = db.Column(db.Integer, nullable=False, default=0)
+    penjualan_juli = db.Column(db.Integer, nullable=False, default=0)
+    penjualan_agustus = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_sku_like(self):
+        """Objek snapshot punya field yang sama dengan SKU sehingga calculator dapat dipakai ulang."""
+        return self
